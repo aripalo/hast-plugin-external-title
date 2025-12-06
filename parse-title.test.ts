@@ -307,4 +307,20 @@ describe('parseTitle', () => {
   it('should handle title with angle brackets (escaped)', () => {
     expect(parseTitle('<title>&lt;tag&gt; in title</title>')).toBe('<tag> in title');
   });
+
+  it('should return null when sanitization throws an error', async () => {
+    // Import the actual DOMPurify mock and make it throw
+    const dompurify = await import('isomorphic-dompurify');
+    const originalSanitize = dompurify.default.sanitize;
+
+    // Make sanitize throw an error
+    vi.mocked(dompurify.default.sanitize).mockImplementationOnce(() => {
+      throw new Error('Sanitization failed');
+    });
+
+    expect(parseTitle('<title>Test</title>')).toBeNull();
+
+    // Restore
+    vi.mocked(dompurify.default.sanitize).mockImplementation(originalSanitize);
+  });
 });

@@ -1,4 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Hoist mock variables so they're available when vi.mock runs
+const { mockWrite, mockData } = vi.hoisted(() => ({
+  mockWrite: vi.fn().mockResolvedValue(undefined),
+  mockData: {} as Record<string, unknown>,
+}));
+
+// Mock lowdb before importing database module
+vi.mock('lowdb/node', () => ({
+  JSONFilePreset: vi.fn().mockResolvedValue({
+    data: mockData,
+    write: mockWrite,
+  }),
+}));
+
 import {
   isErrorEntry,
   isSuccessEntry,
@@ -7,6 +22,8 @@ import {
   createSuccessEntry,
   createErrorEntry,
   STALE_ERROR_THRESHOLD_HOURS,
+  getTitle,
+  setTitle,
   type Entry,
   type EntryError,
 } from './database';
@@ -225,6 +242,175 @@ describe('type guards work correctly together', () => {
     // Error entry
     expect(isSuccessEntry(errorEntry)).toBe(false);
     expect(isErrorEntry(errorEntry)).toBe(true);
+  });
+});
+
+describe('getTitle', () => {
+  beforeEach(() => {
+    // Clear mock data before each test
+    Object.keys(mockData).forEach((key) => delete mockData[key]);
+    mockWrite.mockClear();
+  });
+
+  it('should return exists: false for non-existent URL', async () => {
+    const result = await getTitle('https://example.com/not-found');
+
+    expect(result).toEqual({
+      exists: false,
+      entry: null,
+    });
+  });
+
+  it('should return existing success entry', async () => {
+    const entry: Entry = { title: 'Test Title', updatedAt: '2024-01-01T00:00:00.000Z' };
+    mockData['https://example.com'] = entry;
+
+    const result = await getTitle('https://example.com');
+
+    expect(result).toEqual({
+      exists: true,
+      entry,
+    });
+  });
+
+  it('should return existing success entry with null title', async () => {
+    const entry: Entry = { title: null, updatedAt: '2024-01-01T00:00:00.000Z' };
+    mockData['https://example.com'] = entry;
+
+    const result = await getTitle('https://example.com');
+
+    expect(result).toEqual({
+      exists: true,
+      entry,
+    });
+  });
+
+  it('should return fresh error entry without removing it', async () => {
+    const entry: EntryError = {
+      error: 'Failed to fetch title',
+      updatedAt: new Date().toISOString(), // fresh
+    };
+    mockData['https://example.com'] = entry;
+
+    const result = await getTitle('https://example.com');
+
+    expect(result.exists).toBe(true);
+    expect(result.entry).toEqual(entry);
+    expect(mockWrite).not.toHaveBeenCalled();
+    expect(mockData['https://example.com']).toBeDefined();
+  });
+
+  it('should remove stale error entry and return not exists', async () => {
+    const staleDate = new Date();
+    staleDate.setHours(staleDate.getHours() - 25); // 25 hours ago
+
+    const entry: EntryError = {
+      error: 'Failed to fetch title',
+      updatedAt: staleDate.toISOString(),
+    };
+    mockData['https://example.com'] = entry;
+
+    const result = await getTitle('https://example.com');
+
+    expect(result).toEqual({
+      exists: false,
+      entry: null,
+    });
+    expect(mockWrite).toHaveBeenCalled();
+    expect(mockData['https://example.com']).toBeUndefined();
+  });
+
+  it('should handle URL object', async () => {
+    const entry: Entry = { title: 'Test', updatedAt: '2024-01-01T00:00:00.000Z' };
+    mockData['https://example.com/page'] = entry;
+
+    const result = await getTitle(new URL('https://example.com/page'));
+
+    expect(result.exists).toBe(true);
+    expect(result.entry).toEqual(entry);
+  });
+
+  it('should handle URL with query parameters', async () => {
+    const entry: Entry = { title: 'Search Results', updatedAt: '2024-01-01T00:00:00.000Z' };
+    mockData['https://example.com/search?q=test'] = entry;
+
+    const result = await getTitle('https://example.com/search?q=test');
+
+    expect(result.exists).toBe(true);
+    expect(result.entry).toEqual(entry);
+  });
+});
+
+describe('setTitle', () => {
+  beforeEach(() => {
+    // Clear mock data before each test
+    Object.keys(mockData).forEach((key) => delete mockData[key]);
+    mockWrite.mockClear();
+  });
+
+  it('should store success entry for non-null title', async () => {
+    await setTitle('https://example.com', 'Test Title');
+
+    expect(mockData['https://example.com']).toBeDefined();
+    const entry = mockData['https://example.com'] as Entry;
+    expect(entry.title).toBe('Test Title');
+    expect(entry.updatedAt).toBeDefined();
+    expect(mockWrite).toHaveBeenCalledTimes(1);
+  });
+
+  it('should store error entry for null title', async () => {
+    await setTitle('https://example.com', null);
+
+    expect(mockData['https://example.com']).toBeDefined();
+    const entry = mockData['https://example.com'] as EntryError;
+    expect(entry.error).toBe('Failed to fetch title');
+    expect(entry.updatedAt).toBeDefined();
+    expect(mockWrite).toHaveBeenCalledTimes(1);
+  });
+
+  it('should overwrite existing entry', async () => {
+    mockData['https://example.com'] = { title: 'Old Title', updatedAt: '2024-01-01T00:00:00.000Z' };
+
+    await setTitle('https://example.com', 'New Title');
+
+    const entry = mockData['https://example.com'] as Entry;
+    expect(entry.title).toBe('New Title');
+    expect(entry.updatedAt).not.toBe('2024-01-01T00:00:00.000Z');
+  });
+
+  it('should handle URL object', async () => {
+    await setTitle(new URL('https://example.com/page'), 'Page Title');
+
+    expect(mockData['https://example.com/page']).toBeDefined();
+    const entry = mockData['https://example.com/page'] as Entry;
+    expect(entry.title).toBe('Page Title');
+  });
+
+  it('should handle empty string title', async () => {
+    await setTitle('https://example.com', '');
+
+    const entry = mockData['https://example.com'] as Entry;
+    expect(entry.title).toBe('');
+    expect('error' in entry).toBe(false);
+  });
+
+  it('should call db.write after storing', async () => {
+    await setTitle('https://example.com', 'Test');
+
+    expect(mockWrite).toHaveBeenCalledTimes(1);
+  });
+
+  it('should convert error entry to success entry', async () => {
+    mockData['https://example.com'] = {
+      error: 'Failed to fetch title',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+
+    await setTitle('https://example.com', 'Now it works!');
+
+    const entry = mockData['https://example.com'] as Entry;
+    expect(entry.title).toBe('Now it works!');
+    expect('error' in entry).toBe(false);
   });
 });
 

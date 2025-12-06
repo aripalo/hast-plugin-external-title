@@ -212,6 +212,29 @@ describe('fetchHtml', () => {
       setTimeoutSpy.mockRestore();
       vi.useFakeTimers();
     });
+
+    it('should abort request when timeout fires', async () => {
+      vi.useRealTimers();
+
+      // Create a fetch that hangs until aborted
+      mockFetch.mockImplementation((_url, options) => {
+        return new Promise((_, reject) => {
+          if (options?.signal) {
+            options.signal.addEventListener('abort', () => {
+              reject(new DOMException('The operation was aborted', 'AbortError'));
+            });
+          }
+        });
+      });
+
+      // Use a very short timeout so the test runs quickly
+      const fetchPromise = fetchHtml('https://example.com', { timeout: 10 });
+
+      // Wait for the timeout to fire and abort the request
+      await expect(fetchPromise).rejects.toThrow('aborted');
+
+      vi.useFakeTimers();
+    });
   });
 
   describe('abort signal handling', () => {
