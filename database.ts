@@ -1,39 +1,76 @@
 import { JSONFilePreset } from 'lowdb/node'
 
-type Entry = {
+/** Successful title entry */
+export interface Entry {
   title: string | null;
   updatedAt: string;
-};
+}
 
-type EntryError = {
+/** Error entry for failed fetches */
+export interface EntryError {
   error: string;
   updatedAt: string;
 }
 
-type Database = Record<string, Entry | EntryError>;
+/** Database schema - URL to Entry/EntryError mapping */
+export type Database = Record<string, Entry | EntryError>;
+
+/** Result of getTitle lookup */
+export interface GetTitleResult {
+  exists: boolean;
+  entry: Entry | EntryError | null;
+}
+
+/** Stale entry threshold in hours */
+export const STALE_ERROR_THRESHOLD_HOURS = 24;
+
+/** Type guard to check if entry is an error entry */
+export function isErrorEntry(entry: Entry | EntryError): entry is EntryError {
+  return 'error' in entry;
+}
+
+/** Type guard to check if entry is a successful entry */
+export function isSuccessEntry(entry: Entry | EntryError): entry is Entry {
+  return 'title' in entry;
+}
+
+/** Converts URL to string key */
+export function urlToKey(url: string | URL): string {
+  return url.toString();
+}
+
+/** Checks if an error entry is stale (older than threshold) */
+export function isStaleErrorEntry(entry: EntryError, now: Date = new Date()): boolean {
+  const updatedAt = new Date(entry.updatedAt);
+  const hoursDiff = (now.getTime() - updatedAt.getTime()) / (1000 * 60 * 60);
+  return hoursDiff > STALE_ERROR_THRESHOLD_HOURS;
+}
+
+/** Creates a successful entry */
+export function createSuccessEntry(title: string | null, updatedAt: string = new Date().toISOString()): Entry {
+  return { title, updatedAt };
+}
+
+/** Creates an error entry */
+export function createErrorEntry(updatedAt: string = new Date().toISOString()): EntryError {
+  return { error: 'Failed to fetch title', updatedAt };
+}
 
 const defaultData: Database = {};
 const db = await JSONFilePreset<Database>('db.titles.json', defaultData)
 
-export async function getTitle(url: string | URL): Promise<{ exists: boolean; entry: Entry | EntryError | null }> {
-  const key = url.toString();
+export async function getTitle(url: string | URL): Promise<GetTitleResult> {
+  const key = urlToKey(url);
   const exists = key in db.data;
 
   if (exists) {
     const entry = db.data[key];
 
-    // If it's an error entry and more than 24 hours old, remove and retry
-    if ('error' in entry) {
-      const updatedAt = new Date(entry.updatedAt);
-      const now = new Date();
-      const hoursDiff = (now.getTime() - updatedAt.getTime()) / (1000 * 60 * 60);
-
-      if (hoursDiff > 24) {
-        // Remove stale error entry
-        delete db.data[key];
-        await db.write();
-        return { exists: false, entry: null };
-      }
+    // If it's an error entry and stale, remove and retry
+    if (isErrorEntry(entry) && isStaleErrorEntry(entry)) {
+      delete db.data[key];
+      await db.write();
+      return { exists: false, entry: null };
     }
 
     return { exists: true, entry };
@@ -42,24 +79,13 @@ export async function getTitle(url: string | URL): Promise<{ exists: boolean; en
   return { exists: false, entry: null };
 }
 
-export async function setTitle(url: string | URL, title: string | null) {
-  const key = url.toString();
-  const updatedAt = new Date().toISOString();
+export async function setTitle(url: string | URL, title: string | null): Promise<void> {
+  const key = urlToKey(url);
 
   if (title === null) {
-    // Store as error entry
-    const errorEntry: EntryError = {
-      error: 'Failed to fetch title',
-      updatedAt
-    };
-    db.data[key] = errorEntry;
+    db.data[key] = createErrorEntry();
   } else {
-    // Store as successful entry
-    const entry: Entry = {
-      title,
-      updatedAt
-    };
-    db.data[key] = entry;
+    db.data[key] = createSuccessEntry(title);
   }
 
   await db.write();
