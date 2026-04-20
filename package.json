@@ -38,7 +38,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "prepublishOnly": "pnpm typecheck && pnpm test && pnpm build"
+    "prepack": "pnpm build",
+    "prepublishOnly": "pnpm typecheck && pnpm test"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
