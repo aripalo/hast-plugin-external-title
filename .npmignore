@@ -1,0 +1,8 @@
+src/
+test/
+tsconfig.json
+.npmignore
+*.log
+node_modules/
+coverage/
+.cache/
