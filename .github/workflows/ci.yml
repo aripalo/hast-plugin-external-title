@@ -21,25 +21,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22.11.0 is pinned exactly because it is the floor declared in
-        # package.json `engines` — the earliest LTS of the Node 22 line. A bare
-        # `22` would resolve to the newest 22.x and never actually exercise the
-        # claim. The other two track the latest 22.x and 24.x.
+        # 22.22.2 is pinned exactly because it is the floor declared in
+        # package.json `engines`. A bare `22` would resolve to the newest 22.x
+        # and never actually exercise the claim. The other two track the latest
+        # 22.x and 24.x — and the latest 24.x satisfies the `^24.15.0` arm of
+        # the supported range.
         #
-        # Coverage is excluded from this job because @vitest/coverage-v8
-        # requires Node ^22.14 || >=24.10 and so cannot run on the floor; it
-        # runs in `verify` instead.
+        # The floor is set by isomorphic-dompurify 3, which requires
+        # ^22.22.2 || ^24.15.0 || >=26.0.0. pnpm 11 (>=22.13) and
+        # @vitest/coverage-v8 (^22.14) are both comfortably below it.
         #
-        # pnpm 11 itself requires Node >=22.13, but that does not constrain
-        # this matrix: pnpm/setup installs pnpm's native per-platform
-        # executable, which does not run on Node at all, and then installs the
-        # runtime under test separately.
+        # Coverage still runs only in `verify`, to avoid instrumenting the same
+        # suite three times.
         #
-        # The 22.11.0 job prints a pnpm warning that it is below the
-        # `devEngines.runtime` floor. That is expected and intentional —
-        # `onFail` is `warn` precisely so testing the package's minimum
-        # supported runtime does not fail the install.
-        node: ['22.11.0', '22', '24']
+        # pnpm 11 needs Node >=22.13 to run from npm, but that does not
+        # constrain this matrix: pnpm/setup installs pnpm's native
+        # per-platform executable, which does not run on Node at all, and then
+        # installs the runtime under test separately.
+        node: ['22.22.2', '22', '24']
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

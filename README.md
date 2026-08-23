@@ -62,7 +62,7 @@ You probably **shouldn't** use it if:
 
 ## Install
 
-This package is [ESM only][esm]. In Node.js (version 22.11+):
+This package is [ESM only][esm]. In Node.js (see [Compatibility](#compatibility)):
 
 ```sh
 npm install hast-plugin-external-title
@@ -399,17 +399,18 @@ types `Options`, `ResolverOptions`, `Cache`, `CacheEntry`, `FetchOptions`,
 
 ## Compatibility
 
-Requires Node.js >=22.11 — the earliest LTS of the Node 22 line. Node 20 is
-end-of-life and no longer supported. Works with `satteri` 0.10.x and Astro v7+.
+Requires Node.js `^22.22.2 || ^24.15.0 || >=26.0.0`. Node 20 is end-of-life
+and unsupported.
 
-CI runs the test suite on 22.11.0 exactly, so the floor above is verified
-rather than assumed, plus the latest 22.x and 24.x.
+That range is not arbitrary and is deliberately not simplified to `>=22.22.2`:
+it mirrors what [`isomorphic-dompurify`][] 3 requires. Declaring anything wider
+would let an install succeed here and then fail the transitive engines check —
+Node 23.x, 25.x and 24.0–24.14 are genuinely not supported.
 
-Contributing has a marginally higher floor than using: the repository's
-toolchain is pinned to pnpm 11 via `packageManager`, and pnpm 11 needs
-Node >=22.13. That is declared as `devEngines.runtime` (`>=22.13 <27`), so pnpm
-warns outside it — a warning rather than an error on purpose, so testing the
-package's own floor does not fail the install. None of it affects consumers.
+CI runs the suite on 22.22.2 exactly, so the floor is verified rather than
+assumed, plus the latest 22.x and 24.x.
+
+Works with `satteri` 0.10.x and Astro v7+.
 
 ## Security
 
@@ -530,6 +531,7 @@ Not automatable, and required before the first release:
 
 [MIT][license] © [Ari Palo][author]
 
+[`isomorphic-dompurify`]: https://github.com/kkomelin/isomorphic-dompurify
 [`pnpm/setup`]: https://github.com/pnpm/setup
 [semantic-release]: https://semantic-release.org
 [conventional commits]: https://www.conventionalcommits.org
