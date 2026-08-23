@@ -97,20 +97,32 @@ beforeAll(async () => {
         res.end('<html><head><title>Ünicode Default</title></head></html>');
         return;
 
-      case '/cut-mid-title':
+      case '/no-title':
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(
-          '<html><head><title>Partial Title That Gets Cut' +
-            'X'.repeat(4000) +
-            '</title></head>'
-        );
+        res.end('<html><head><meta name=x content=y></head><body>x</body></html>');
         return;
 
-      case '/cut-empty-title':
+      case '/unclosed-title':
+        // Stream ends cleanly, but `</title>` never arrives.
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(
-          '<html><head><title>' + 'X'.repeat(4000) + '</title></head>'
-        );
+        res.end('<html><head><title>Unclosed Title');
+        return;
+
+      case '/dangling-title-head':
+        // `</head>` inside `<title>` is RCDATA, so there is no title element.
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><head><title>Oops</head><body>x</body></html>');
+        return;
+
+      case '/endless-title':
+        // Opens a title and never closes it, well past any backstop.
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<html><head><title>Real Beginning' + 'X'.repeat(2_000_000));
+        return;
+
+      case '/empty-body':
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('');
         return;
 
       case '/duplicate-content-type':
@@ -292,39 +304,19 @@ describe('fetchHtml', () => {
       expect(html.endsWith('</title>')).toBe(true);
     });
 
-    it('does not leak synthetic markup into a title cut short mid-element', async () => {
-      // The backstop fires inside `<title>`, where appended tags would be
-      // RCDATA text rather than markup.
-      const html = await fetchHtml(`${base}/cut-mid-title`, { maxBytes: 1024 });
-
-      expect(html).not.toContain('</head></html>');
-
-      const title = parseTitle(html);
-      expect(title).toMatch(/^Partial Title That Gets CutX*$/);
-      expect(title).not.toContain('<');
-      expect(title).not.toContain('head');
-      expect(title).not.toContain('html');
+    it('rejects a head that exceeds the backstop rather than returning part of it', async () => {
+      await expect(
+        fetchHtml(`${base}/no-head-close`, { maxBytes: 64 * 1024 })
+      ).rejects.toThrow('document head not closed within 65536 bytes');
     });
 
-    it('does not invent a title out of appended markup', async () => {
-      // Nothing but padding inside the title when the cut lands: the result
-      // must not be a title made of closing tags.
-      const html = await fetchHtml(`${base}/cut-empty-title`, {
-        maxBytes: 1024,
-      });
-
-      expect(html).not.toContain('</head></html>');
-      expect(parseTitle(html)).toMatch(/^X+$/);
-    });
-
-    it('stops at the backstop when the head never closes', async () => {
-      const html = await fetchHtml(`${base}/no-head-close`, {
-        maxBytes: 64 * 1024,
-      });
-
-      // Bounded by maxBytes plus the chunk that crossed it.
-      expect(html.length).toBeLessThan(64 * 1024 * 4);
-      expect(parseTitle(html)).toBeNull();
+    it('never yields a truncated title when the backstop cuts mid-title', async () => {
+      // The real risk: an HTML parser auto-closes an unterminated `<title>`,
+      // so returning the partial read would produce a plausible-looking but
+      // wrong title — and cache it under a default ttl of Infinity.
+      await expect(
+        fetchHtml(`${base}/endless-title`, { maxBytes: 4096 })
+      ).rejects.toThrow('document head not closed within 4096 bytes');
     });
 
     it('tolerates a non-positive or NaN maxBytes', async () => {
@@ -355,6 +347,33 @@ describe('fetchHtml', () => {
     it('returns an empty string for a bodyless success', async () => {
       const html = await fetchHtml(`${base}/204`);
       expect(html).toBe('');
+    });
+  });
+
+  describe('head completeness', () => {
+    it('rejects a stream that ends before the head closes', async () => {
+      // Indistinguishable from a dropped connection when there is no
+      // Content-Length, so an unterminated title is never trusted.
+      await expect(fetchHtml(`${base}/unclosed-title`)).rejects.toThrow(
+        'response ended before the document head closed'
+      );
+    });
+
+    it('rejects a head that closed around an unterminated title', async () => {
+      await expect(fetchHtml(`${base}/dangling-title-head`)).rejects.toThrow(
+        'document head closed with an unterminated <title>'
+      );
+    });
+
+    it('rejects an empty body', async () => {
+      await expect(fetchHtml(`${base}/empty-body`)).rejects.toThrow(
+        'response ended before the document head closed'
+      );
+    });
+
+    it('accepts a head that closes with no title at all', async () => {
+      const html = await fetchHtml(`${base}/no-title`);
+      expect(parseTitle(html)).toBeNull();
     });
   });
 

@@ -170,7 +170,7 @@ Configuration (TypeScript type).
 | `ttl`              | `number`                        | `Infinity`              | TTL for **successful** entries, in ms. An entry exactly `ttl` old is still considered fresh.                        |
 | `failureTtl`       | `number`                        | `86_400_000` (24 h)     | TTL for **failed** entries (`title === null`), in ms. Use `0` to never cache failures, `Infinity` to cache forever. |
 | `test`             | `(href, node) => boolean`       | `http(s)://...`         | Predicate deciding which `<a>` elements to process. `node` is a **frozen** hast `Element`.                          |
-| `attribute`        | `string`                        | `'title'`               | Attribute name written on the link element.                                                                        |
+| `attribute`        | `string`                        | `'title'`               | Attribute name written on the link element. Must be inert — see [Security](#security).                              |
 | `includeUpdatedAt` | `boolean`                       | `true`                  | Whether to also write `data-title-updated-at` (ISO timestamp).                                                     |
 | `concurrency`      | `number`                        | `8`                     | Maximum concurrent outbound fetches **per plugin instance** — see [Caching and scope](#caching-and-scope).          |
 | `fetch`            | `FetchOptions`                  | see below               | Options forwarded to the internal HTTP client (`timeout`, `userAgent`, `signal`, `maxBytes`) — see [Fetching](#fetching). |
@@ -289,6 +289,14 @@ deliberately small:
   is approximate — reading stops after the chunk that crosses the threshold —
   and it is clamped to `[1 KiB, 1 MiB]`, because the stop-marker search costs
   roughly the square of it.
+- **A partial head is never used.** If the stream ends, or the backstop fires,
+  before the head provably closed, the fetch fails instead of handing back what
+  arrived. This matters because HTML parsers cheerfully auto-close an
+  unterminated `<title>`, so a half-downloaded page would otherwise yield a
+  truncated title that looks perfectly plausible — and get cached as though it
+  were correct. A response with no `Content-Length` that gets cut off is
+  indistinguishable from one that finished, so the closing tag is the only
+  trustworthy signal.
 - **`timeout` (default 5 s) is a total deadline** covering the response headers
   *and* the body read. A server that sends headers and then stalls mid-body is
   bounded by it too.
@@ -377,6 +385,8 @@ externalTitle({
   page are cached separately.
 - **A `<title>` outside `<head>` is not found.** Reading stops at the end of the
   head (see [Fetching](#fetching)), so a title misplaced in the body is missed.
+- **A document whose head never closes yields no title**, rather than a
+  partial one.
 - **A response with no `Content-Type` is treated as a failure**, and negatively
   cached for `failureTtl`. Set `failureTtl: 0` to retry such links every build.
 
@@ -393,9 +403,33 @@ Compatible with maintained versions of Node.js (>=20.19). Works with
 
 ## Security
 
-This plugin sets the `title` attribute on `<a>` elements based on data fetched
-from third-party servers. `title` is generally not an XSS vector — browsers do
-not interpret it as HTML, and Sätteri escapes attribute values on output.
+This plugin puts text from third-party servers into your pages, so it is worth
+being precise about what that can and cannot do.
+
+**Fetched titles are escaped, not interpreted.** Sätteri escapes attribute
+values on output, so a title of `Hello" onmouseover="alert(1)` is emitted as
+`title="Hello&quot; onmouseover=&quot;alert(1)"`. Re-parsing that markup yields
+an anchor with exactly two attributes and no injected elements: the payload
+survives only as literal tooltip text. (Raw `<` and `>` may appear unescaped
+inside the value, which is valid — the quote is what delimits an attribute, and
+that is always escaped.)
+
+**Nothing from the remote page executes.** Titles are extracted with jsdom via
+DOMPurify, which does not run scripts, and the sanitizer keeps only
+`<html>`/`<head>`/`<title>` anyway. `<script>`, `onerror`, `<svg onload>`,
+`javascript:` URLs and `<body onload>` in a fetched page all do nothing. The
+plugin also never requests subresources, so a hostile page cannot make your
+build fetch anything it did not link to: one link, one request.
+
+**The target attribute must be inert.** Because the value is attacker-influenced,
+`attribute` rejects anything that could execute or redirect — event handlers
+(`on*`), URL-bearing attributes (`href`, `src`, `srcset`, `action`,
+`formaction`, `poster`, `background`, `data`, `srcdoc`) and `style`. The check
+runs when the plugin is created, so a mistake fails while your config loads
+rather than shipping `onmouseover="…"` to production.
+
+**Only the document head is read**, and only if it arrives complete — see
+[Fetching](#fetching).
 
 Unlike the rehype ecosystem, Sätteri has no downstream sanitizer equivalent to
 `rehype-sanitize`, so the internal sanitization is the whole defense: HTML
@@ -427,6 +461,8 @@ options are the same except where noted:
 | `fetch.signal` | No longer disables `timeout`; both apply |
 | Content type | Only HTML responses are read; a missing `Content-Type` is now a failure |
 | Body reads | Stop at the end of `<head>` instead of downloading the whole page |
+| Partial reads | A head that never closes is an error, not a partial title |
+| `attribute` | Event handlers, URL attributes and `style` are now rejected |
 
 ## License
 

@@ -1,7 +1,7 @@
 {
   "name": "hast-plugin-external-title",
   "version": "0.1.0",
-  "description": "Sätteri hast plugin that fetches the page title of external links and sets it as the `title` attribute, with pluggable caching.",
+  "description": "S\u00e4tteri hast plugin that fetches the page title of external links and sets it as the `title` attribute, with pluggable caching.",
   "license": "MIT",
   "author": {
     "name": "Ari Palo",
@@ -37,9 +37,10 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
     "prepack": "pnpm build",
-    "prepublishOnly": "pnpm typecheck && pnpm test"
+    "prepublishOnly": "pnpm typecheck && pnpm test:coverage"
   },
   "dependencies": {
     "@types/hast": "^3.0.5",

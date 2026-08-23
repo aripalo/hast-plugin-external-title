@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as cheerio from 'cheerio';
 import { markdownToHtml } from 'satteri';
 
 import externalTitle, { PLUGIN_NAME } from '../src/index.js';
@@ -274,6 +275,157 @@ describe('hastPluginExternalTitle', () => {
     const { html } = await compile('[x](https://sanitized.example.com)');
 
     expect(html).toContain('title="Real &amp; Trimmed"');
+  });
+
+  describe('untrusted title content', () => {
+    /** Compiles with `title` fetched verbatim from a hostile page. */
+    async function withTitle(title: string, options: Options = {}) {
+      stubFetch(() => ({
+        body: `<html><head><title>${title}</title></head></html>`,
+      }));
+      const { html } = await compile('[x](https://hostile.example.com)', {
+        includeUpdatedAt: false,
+        ...options,
+      });
+      return html;
+    }
+
+    it.each([
+      ['double quote', 'Hello" onmouseover="alert(1)'],
+      ['quote then tag', '"><script>alert(1)</script>'],
+      ['single quote', "x' onclick='alert(1)"],
+      ['closing anchor', '</a><script>alert(1)</script>'],
+      ['attribute break', '" onload="alert(1)" x="'],
+      ['img payload', '<img src=x onerror=alert(1)>'],
+    ])('escapes %s so the attribute cannot be broken out of', async (_name, title) => {
+      const html = await withTitle(title);
+
+      // Re-parse the emitted markup the way a browser would. Payload text
+      // sitting inside an escaped attribute value is inert, so what matters is
+      // the attribute set and element tree the parser actually derives.
+      const $ = cheerio.load(html);
+      const anchors = $('a');
+
+      expect(anchors).toHaveLength(1);
+      expect(Object.keys(anchors[0]!.attribs).sort()).toEqual([
+        'href',
+        'title',
+      ]);
+      // The payload survives only as literal text in the tooltip.
+      expect(anchors.attr('title')).toBe(title);
+      expect(anchors.attr('href')).toBe('https://hostile.example.com');
+      // Nothing was smuggled into the document as markup.
+      expect($('script')).toHaveLength(0);
+      expect($('img')).toHaveLength(0);
+    });
+
+    it('does not execute script from the fetched page', async () => {
+      const flag = 'pluginScriptExecuted';
+      const globals = globalThis as Record<string, unknown>;
+      globals[flag] = false;
+
+      const evil = [
+        '<html><head>',
+        `<script>globalThis.${flag} = true;</script>`,
+        `<img src=x onerror="globalThis.${flag} = true">`,
+        `<svg onload="globalThis.${flag} = true"></svg>`,
+        '<title>Harmless</title>',
+        '</head></html>',
+      ].join('');
+
+      stubFetch(() => ({ body: evil }));
+      await compile('[x](https://evil.example.com)');
+
+      expect(globals[flag]).toBe(false);
+      delete globals[flag];
+    });
+
+    it('does not fetch subresources referenced by the fetched page', async () => {
+      stubFetch(() => ({
+        body: [
+          '<html><head>',
+          '<script src="https://attacker.example.com/x.js"></script>',
+          '<link rel=stylesheet href="https://attacker.example.com/x.css">',
+          '<title>Only One Request</title>',
+          '</head></html>',
+        ].join(''),
+      }));
+
+      await compile('[x](https://page.example.com)');
+
+      expect(requested).toEqual(['https://page.example.com']);
+    });
+
+    it('neutralizes control characters', async () => {
+      const html = await withTitle(
+        'Before' + String.fromCharCode(0) + 'After'
+      );
+      expect(html).toContain('title=');
+      expect(html).not.toContain(String.fromCharCode(0));
+    });
+  });
+
+  describe('attribute safety', () => {
+    it.each(['onmouseover', 'ONCLICK', 'onFocus'])(
+      'refuses to write titles to the event handler %s',
+      (attribute) => {
+        expect(() => externalTitle({ attribute })).toThrow(
+          /refusing to write fetched titles/
+        );
+      }
+    );
+
+    it.each(['href', 'src', 'style', 'srcset', 'formaction', 'SRCDOC'])(
+      'refuses to write titles to %s',
+      (attribute) => {
+        expect(() => externalTitle({ attribute })).toThrow(
+          /refusing to write fetched titles/
+        );
+      }
+    );
+
+    it.each(['', ' ', '1bad', 'has space', 'quote"', '<tag>', 'xlink:href'])(
+      'rejects the malformed attribute name %p',
+      (attribute) => {
+        expect(() => externalTitle({ attribute })).toThrow(
+          /invalid attribute name/
+        );
+      }
+    );
+
+    it.each(['title', 'data-link-title', 'aria-description'])(
+      'accepts the inert attribute %s',
+      (attribute) => {
+        expect(() => externalTitle({ attribute })).not.toThrow();
+      }
+    );
+  });
+
+  describe('anchors without a usable href', () => {
+    it('skips an anchor with no href attribute', async () => {
+      const { html } = await markdownToHtml('<a>no href</a>', {
+        features: { rawHtml: true },
+        hastPlugins: [
+          externalTitle({ cache: memoryCache(), onWarning: () => {} }),
+        ],
+      });
+
+      expect(html).not.toContain('title=');
+      expect(requested).toEqual([]);
+    });
+
+    it('skips an anchor whose href is a boolean attribute', async () => {
+      // `<a href>` parses to `href: true` in hast, not a string.
+      const { html } = await markdownToHtml('<a href>bare</a>', {
+        features: { rawHtml: true },
+        hastPlugins: [
+          externalTitle({ cache: memoryCache(), onWarning: () => {} }),
+        ],
+      });
+
+      expect(html).not.toContain('title=');
+      expect(requested).toEqual([]);
+    });
   });
 
   it('respects the concurrency limit across a document', async () => {

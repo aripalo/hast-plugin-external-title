@@ -41,15 +41,21 @@ const HTML_CONTENT_TYPE =
   /^\s*(?:text\/html|application\/xhtml\+xml)\s*(?:;|$)/i;
 
 /**
- * Everything we need has arrived once we have seen a complete `<title>`
- * element or the end of the `<head>`.
+ * Proof that the document head is complete: either a whole `<title>` element,
+ * or the end of the `<head>`.
  *
  * Requiring the closing tag to be *paired* with an opening one matters: a
  * stray `</title>` inside a comment or an attribute value would otherwise cut
  * the document short before the real title. Trailing whitespace is bounded so
  * a hostile response cannot stretch the matched marker.
  */
-const STOP_MARKER = /<title[^>]*>[\s\S]*?<\/title\s{0,32}>|<\/head\s{0,32}>/i;
+const HEAD_COMPLETE = /<title[^>]*>[\s\S]*?<\/title\s{0,32}>|<\/head\s{0,32}>/i;
+
+/** An opening `<title>` tag. */
+const TITLE_OPEN = /<title[^>]*>/i;
+
+/** A closing `</title>` tag. */
+const TITLE_CLOSE = /<\/title\s{0,32}>/i;
 
 /**
  * Normalizes `timeout` into a delay `AbortSignal.timeout` accepts.
@@ -114,15 +120,20 @@ async function discard(response: Response): Promise<void> {
 }
 
 /**
- * Reads just enough of the body to contain the title.
+ * Reads just enough of the body to contain a **complete** document head.
  *
- * Stops at {@link STOP_MARKER}, or at `maxBytes` for a document that never
- * closes its head.
+ * A partial read is never returned. Anything short of proof that the head
+ * finished — the backstop firing, or the stream ending without a
+ * {@link HEAD_COMPLETE} match — throws, so a half-downloaded `<title>` can
+ * never reach a link. The distinction matters because a truncated transfer and
+ * a finished one look identical when the response carries no `Content-Length`,
+ * and because HTML parsers happily auto-close an unterminated `<title>`,
+ * turning whatever arrived into a plausible-looking title.
  *
- * Nothing is appended to a truncated document. HTML parsers close open
- * elements at EOF on their own, whereas a synthetic `</head></html>` lands
- * *inside* `<title>` whenever the backstop cuts mid-title — where it is
- * RCDATA, not markup, and would be extracted as part of the title.
+ * Nothing is appended to the returned markup either. A synthetic
+ * `</head></html>` would land *inside* `<title>` whenever the cut fell
+ * mid-title — where it is RCDATA, not markup, and would be extracted as part
+ * of the title.
  */
 async function readDocumentHead(
   body: ReadableStream<Uint8Array>,
@@ -132,11 +143,15 @@ async function readDocumentHead(
   const reader = body.getReader();
   let text = '';
   let bytes = 0;
+  let exhausted = false;
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        exhausted = true;
+        break;
+      }
 
       bytes += value.byteLength;
       // `stream: true` holds back a multi-byte character split across a chunk
@@ -147,11 +162,11 @@ async function readDocumentHead(
       // free to deliver the whole document in one chunk, and without this the
       // entire body would be kept. Scanning the accumulated string is
       // quadratic in principle, which is what `maxBytes` bounds.
-      const stop = STOP_MARKER.exec(text);
-      if (stop) {
+      const complete = HEAD_COMPLETE.exec(text);
+      if (complete) {
         // The text ends at `>`, so any bytes the decoder still holds belong to
         // content we are discarding — no final flush needed.
-        return text.slice(0, stop.index + stop[0].length);
+        return verifyHead(text.slice(0, complete.index + complete[0].length));
       }
 
       if (bytes >= maxBytes) break;
@@ -164,9 +179,26 @@ async function readDocumentHead(
     }
   }
 
-  // Flush, so a dangling multi-byte sequence becomes one U+FFFD rather than
-  // silently vanishing.
-  return text + decoder.decode();
+  throw new Error(
+    exhausted
+      ? 'response ended before the document head closed'
+      : `document head not closed within ${maxBytes} bytes`
+  );
+}
+
+/**
+ * Rejects a head that closed around an unterminated `<title>`.
+ *
+ * `</head>` inside `<title>` is RCDATA, not a tag, so a document like
+ * `<title>Oops</head><body>` has no title element at all — but an HTML parser
+ * will auto-close it at end of input and hand back `Oops</head>...` as the
+ * title. Better to report nothing than to invent that.
+ */
+function verifyHead(head: string): string {
+  if (TITLE_OPEN.test(head) && !TITLE_CLOSE.test(head)) {
+    throw new Error('document head closed with an unterminated <title>');
+  }
+  return head;
 }
 
 /**
@@ -182,8 +214,13 @@ async function readDocumentHead(
  *   body bytes transferred.
  * - **Early stop.** Reading ends at `</title>` or `</head>`, typically a tiny
  *   fraction of a page. `maxBytes` is only a backstop.
+ * - **Complete or nothing.** A partial head is never returned: if the stream
+ *   ends, or the backstop fires, before the head provably closed, this throws
+ *   rather than handing back markup a parser would turn into a truncated
+ *   title.
  *
- * @returns The document head markup, or `''` for a bodyless success.
+ * @returns Markup for a complete document head, or `''` for a bodyless
+ *   success.
  */
 export async function fetchHtml(
   url: string | URL,

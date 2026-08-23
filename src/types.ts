@@ -176,6 +176,12 @@ export interface Options extends ResolverOptions {
 
   /**
    * Name of the HTML attribute to set on the link element.
+   *
+   * Must be an inert attribute: event handlers (`on*`), URL-bearing
+   * attributes such as `href` or `src`, and `style` are rejected when the
+   * plugin is created, because the value comes from a third-party page and
+   * would otherwise be able to run script or repoint the link.
+   *
    * Default: `'title'`.
    */
   attribute?: string;

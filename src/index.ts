@@ -28,6 +28,54 @@ const UPDATED_AT_ATTRIBUTE = 'data-title-updated-at';
 const defaultTest: LinkPredicate = (href) =>
   href.startsWith('https://') || href.startsWith('http://');
 
+/** Shape of a plain HTML attribute name. */
+const ATTRIBUTE_NAME = /^[a-zA-Z][a-zA-Z0-9-]*$/;
+
+/**
+ * Attributes that must never receive a fetched title.
+ *
+ * Titles come from third-party servers, so the target attribute has to be
+ * inert. These are not: `href`/`src`-style attributes would repoint the link
+ * at remote-controlled text, and `style` would hand it the CSS parser. Any
+ * `on*` attribute is rejected separately — those are executable.
+ */
+const UNSAFE_ATTRIBUTES = new Set([
+  'action',
+  'background',
+  'data',
+  'formaction',
+  'href',
+  'poster',
+  'src',
+  'srcdoc',
+  'srcset',
+  'style',
+]);
+
+/**
+ * Validates the `attribute` option.
+ *
+ * Checked once, when the plugin is created, so a misconfiguration surfaces
+ * while reading the config rather than as mysterious markup much later.
+ */
+function assertSafeAttribute(attribute: string): void {
+  if (!ATTRIBUTE_NAME.test(attribute)) {
+    throw new Error(
+      `${PLUGIN_NAME}: invalid attribute name ${JSON.stringify(attribute)}`
+    );
+  }
+  if (
+    attribute.toLowerCase().startsWith('on') ||
+    UNSAFE_ATTRIBUTES.has(attribute.toLowerCase())
+  ) {
+    throw new Error(
+      `${PLUGIN_NAME}: refusing to write fetched titles to ${JSON.stringify(
+        attribute
+      )}, which would let a third-party page inject script or change the link target`
+    );
+  }
+}
+
 /**
  * Sätteri hast plugin that fetches the page title of external links and writes
  * it as the link's `title` attribute (with pluggable caching).
@@ -69,6 +117,8 @@ export function hastPluginExternalTitle(options: Options = {}) {
   const test = options.test ?? defaultTest;
   const attribute = options.attribute ?? 'title';
   const includeUpdatedAt = options.includeUpdatedAt ?? true;
+
+  assertSafeAttribute(attribute);
 
   return defineHastPlugin({
     name: PLUGIN_NAME,
