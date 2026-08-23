@@ -29,3 +29,4 @@ CLAUDE.md
 release.config.mjs
 vitest.config.ts
 tsconfig.test.json
+pnpm-workspace.yaml
