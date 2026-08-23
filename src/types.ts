@@ -48,12 +48,24 @@ export interface FetchOptions {
 /**
  * Predicate that decides whether a given `<a>` element should be processed.
  *
+ * Sätteri hands visitors frozen nodes, hence `Readonly<Element>`.
+ *
  * Defaults to: href starts with `http://` or `https://`.
  */
-export type LinkPredicate = (href: string, node: Element) => boolean;
+export type LinkPredicate = (href: string, node: Readonly<Element>) => boolean;
 
-/** Plugin configuration. */
-export interface Options {
+/** A non-fatal problem encountered while resolving a title. */
+export interface Warning {
+  /** Human-readable description, already prefixed with the plugin name. */
+  message: string;
+  /** The URL being resolved when the problem occurred. */
+  url: string;
+  /** The originating error, when there was one. */
+  cause?: unknown;
+}
+
+/** Configuration for the framework-agnostic title resolver. */
+export interface ResolverOptions {
   /**
    * Cache configuration.
    *
@@ -86,6 +98,37 @@ export interface Options {
   failureTtl?: number;
 
   /**
+   * Maximum number of concurrent outbound HTTP requests.
+   *
+   * Scoped to the plugin instance, not to a document: Sätteri calls the
+   * exported factory once, so a single limiter covers every document in the
+   * build. (The rehype predecessor capped per document instead.)
+   *
+   * Default: `8`.
+   */
+  concurrency?: number;
+
+  /** Options forwarded to the internal HTTP client. */
+  fetch?: FetchOptions;
+
+  /**
+   * Called for every non-fatal problem: a failed fetch, or a cache backend
+   * that threw. Fires once per URL, since resolution is deduplicated across
+   * the whole build.
+   *
+   * Default: `console.warn(warning.message)`, so failures stay visible in an
+   * `astro build`. Pass a no-op to silence, or route into your own logger.
+   *
+   * (Sätteri's `ctx.report()` is not a substitute: as of `satteri@0.10.5` the
+   * diagnostics it collects are discarded rather than returned with the
+   * compile result.)
+   */
+  onWarning?: (warning: Warning) => void;
+}
+
+/** Plugin configuration. */
+export interface Options extends ResolverOptions {
+  /**
    * Predicate to decide which `<a>` elements are considered "external" and
    * should be processed.
    *
@@ -106,15 +149,4 @@ export interface Options {
    * Default: `true`.
    */
   includeUpdatedAt?: boolean;
-
-  /**
-   * Maximum number of concurrent outbound HTTP requests per `transformer`
-   * invocation.
-   *
-   * Default: `8`.
-   */
-  concurrency?: number;
-
-  /** Options forwarded to the internal HTTP client. */
-  fetch?: FetchOptions;
 }

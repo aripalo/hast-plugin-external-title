@@ -1,9 +1,12 @@
-# rehype-external-link-title
+# hast-plugin-external-title
 
-[**rehype**][rehype] plugin that fetches the page `<title>` of every external
-link in your HTML and writes it to the link's `title` attribute (so users see
-the destination's real name when they hover the link), with a pluggable
-caching layer.
+[**Sätteri**][satteri] hast plugin that fetches the page `<title>` of every
+external link in your Markdown and writes it to the link's `title` attribute
+(so users see the destination's real name when they hover the link), with a
+pluggable caching layer.
+
+Built for [Astro][] v7+, which processes Markdown and MDX with Sätteri instead
+of unified/remark/rehype.
 
 ## Contents
 
@@ -12,22 +15,28 @@ caching layer.
 - [Install](#install)
 - [Use](#use)
 - [API](#api)
-  - [`unified().use(rehypeExternalLinkTitle[, options])`](#unifieduserehypeexternallinktitle-options)
+  - [`externalTitle(options?)`](#externaltitleoptions)
   - [`Options`](#options)
   - [`Cache`](#cache)
   - [Built-in caches](#built-in-caches)
+- [Warnings](#warnings)
+- [Caching and scope](#caching-and-scope)
 - [Examples](#examples)
+- [Limitations](#limitations)
 - [Types](#types)
 - [Compatibility](#compatibility)
 - [Security](#security)
+- [Migrating from `rehype-external-link-title`](#migrating-from-rehype-external-link-title)
 - [License](#license)
 
 ## What is this?
 
-This is a [unified][] ([rehype][]) plugin. It walks the [hast][] tree, finds
-external `<a>` elements (by default: anchors whose `href` starts with `http://`
-or `https://`), fetches each unique URL, parses the `<title>` element from the
-response, and stores it on the anchor as a `title` attribute.
+This is a [Sätteri][satteri] [hast plugin][satteri-plugins]. It subscribes to
+`a` elements only — Sätteri filters by tag name in Rust, so no other node
+crosses into JavaScript — and for each external anchor (by default: `href`
+starting with `http://` or `https://`) it fetches the URL, parses the `<title>`
+element from the response, and writes it onto the anchor as a `title`
+attribute.
 
 To avoid hammering remote servers (and to keep your build times reasonable),
 results are persisted to a cache. The cache is **pluggable**: a default
@@ -44,64 +53,99 @@ the actual page title rather than the raw URL.
 You probably **shouldn't** use it if:
 
 - Your build runs in a sandbox without outbound network access.
-- You don't trust the remote pages and don't want to render their titles
-  (consider [`rehype-sanitize`][rehype-sanitize] downstream regardless — see
+- You don't trust the remote pages and don't want to render their titles (see
   [Security](#security)).
 - Build performance is more important than hover-over UX (the first build
   fetches every link; subsequent builds are cache hits).
 
 ## Install
 
-This package is [ESM only][esm]. In Node.js (version 18+):
+This package is [ESM only][esm]. In Node.js (version 20.19+):
 
 ```sh
-npm install rehype-external-link-title
+npm install hast-plugin-external-title
 ```
 
 ```sh
-pnpm add rehype-external-link-title
+pnpm add hast-plugin-external-title
 ```
+
+[`satteri`][satteri] is a peer dependency. If you are using Astro v7+ it is
+already installed via `@astrojs/markdown-satteri`.
 
 ## Use
 
-Say we have the following input HTML:
+### Astro v7+
 
-```html
-<p>Read more on <a href="https://example.com">example.com</a>.</p>
+```js
+// astro.config.mjs
+import {defineConfig} from 'astro/config'
+import {satteri} from '@astrojs/markdown-satteri'
+import externalTitle from 'hast-plugin-external-title'
+
+export default defineConfig({
+  markdown: {
+    processor: satteri({
+      hastPlugins: [externalTitle({cache: '.cache/titles.json'})]
+    })
+  }
+})
+```
+
+### Standalone
+
+Say we have the following Markdown:
+
+```md
+Read more on [example.com](https://example.com).
 ```
 
 …and a script `example.js`:
 
 ```js
-import {unified} from 'unified'
-import rehypeParse from 'rehype-parse'
-import rehypeStringify from 'rehype-stringify'
-import rehypeExternalLinkTitle from 'rehype-external-link-title'
+import {markdownToHtml} from 'satteri'
+import externalTitle from 'hast-plugin-external-title'
 
-const file = await unified()
-  .use(rehypeParse, {fragment: true})
-  .use(rehypeExternalLinkTitle)
-  .use(rehypeStringify)
-  .process('<p><a href="https://example.com">example.com</a></p>')
+const {html} = await markdownToHtml(
+  'Read more on [example.com](https://example.com).',
+  {hastPlugins: [externalTitle()]}
+)
 
-console.log(String(file))
+console.log(html)
 ```
 
 …running `node example.js` yields (assuming the page's title is `Example Domain`):
 
 ```html
-<p><a href="https://example.com" title="Example Domain" data-title-updated-at="2026-04-19T00:00:00.000Z">example.com</a></p>
+<p>Read more on <a href="https://example.com" title="Example Domain" data-title-updated-at="2026-04-19T00:00:00.000Z">example.com</a>.</p>
 ```
+
+> [!IMPORTANT]
+> This plugin's visitor is **async**, which makes the whole compile async.
+> `await` the result of `markdownToHtml` / `mdxToJs` / `markdownToJs`. The
+> types reflect this: with this plugin registered, the return type is a
+> `Promise`.
 
 ## API
 
-This package exports the named identifiers `lowdbCache`, `memoryCache`, and the
-TypeScript types `Cache`, `CacheEntry`, `FetchOptions`, `LinkPredicate`, and
-`Options`. The default export is `rehypeExternalLinkTitle`.
+The plugin factory is both the default export and the named export
+`hastPluginExternalTitle`. The examples in this README import it as
+`externalTitle` for brevity:
 
-### `unified().use(rehypeExternalLinkTitle[, options])`
+```ts
+import externalTitle from 'hast-plugin-external-title'
+// equivalently:
+import {hastPluginExternalTitle} from 'hast-plugin-external-title'
+```
 
-Adds page titles to external `<a>` elements as `title` attributes, with caching.
+This package additionally exports `lowdbCache`, `memoryCache`,
+`createTitleResolver`, `PLUGIN_NAME`, and the TypeScript types `Cache`,
+`CacheEntry`, `FetchOptions`, `LinkPredicate`, `Options`, `ResolverOptions`,
+`TitleResolver`, and `Warning`.
+
+### `externalTitle(options?)`
+
+Creates the plugin definition to pass to Sätteri's `hastPlugins`.
 
 ###### Parameters
 
@@ -109,28 +153,32 @@ Adds page titles to external `<a>` elements as `title` attributes, with caching.
 
 ###### Returns
 
-Async transform.
+A Sätteri hast plugin definition (`HastPluginDefinition`), with an async
+`element` visitor filtered to `a`.
+
+Call it **once** and reuse the result — see [Caching and
+scope](#caching-and-scope).
 
 ### `Options`
 
 Configuration (TypeScript type).
 
-| Field              | Type                                  | Default                              | Description                                                                                                                                            |
-| ------------------ | ------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `cache`            | `string \| Cache`                     | built-in `lowdbCache()`              | `undefined`: lowdb at `./db.titles.json`. `string`: lowdb at the given path. `Cache`: your own implementation.                                          |
-| `ttl`              | `number`                              | `Infinity`                           | TTL for **successful** entries, in ms.                                                                                                                 |
-| `failureTtl`       | `number`                              | `86_400_000` (24 h)                  | TTL for **failed** entries (`title === null`), in ms. Use `0` to never cache failures, `Infinity` to cache forever.                                    |
-| `test`             | `(href, node) => boolean`             | `http(s)://...`                      | Predicate deciding which `<a>` elements to process.                                                                                                    |
-| `attribute`        | `string`                              | `'title'`                            | Attribute name written on the link element.                                                                                                            |
-| `includeUpdatedAt` | `boolean`                             | `true`                               | Whether to also write `data-title-updated-at` (ISO timestamp).                                                                                         |
-| `concurrency`      | `number`                              | `8`                                  | Maximum concurrent outbound fetches per transformer invocation.                                                                                        |
-| `fetch`            | `FetchOptions`                        | see below                            | Options forwarded to the internal HTTP client (`timeout`, `userAgent`, `signal`).                                                                      |
+| Field              | Type                            | Default                 | Description                                                                                                        |
+| ------------------ | ------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `cache`            | `string \| Cache`               | built-in `lowdbCache()` | `undefined`: lowdb at `./db.titles.json`. `string`: lowdb at the given path. `Cache`: your own implementation.      |
+| `ttl`              | `number`                        | `Infinity`              | TTL for **successful** entries, in ms. An entry exactly `ttl` old is still considered fresh.                        |
+| `failureTtl`       | `number`                        | `86_400_000` (24 h)     | TTL for **failed** entries (`title === null`), in ms. Use `0` to never cache failures, `Infinity` to cache forever. |
+| `test`             | `(href, node) => boolean`       | `http(s)://...`         | Predicate deciding which `<a>` elements to process. `node` is a **frozen** hast `Element`.                          |
+| `attribute`        | `string`                        | `'title'`               | Attribute name written on the link element.                                                                        |
+| `includeUpdatedAt` | `boolean`                       | `true`                  | Whether to also write `data-title-updated-at` (ISO timestamp).                                                     |
+| `concurrency`      | `number`                        | `8`                     | Maximum concurrent outbound fetches **per plugin instance** — see [Caching and scope](#caching-and-scope).          |
+| `fetch`            | `FetchOptions`                  | see below               | Options forwarded to the internal HTTP client (`timeout`, `userAgent`, `signal`).                                   |
+| `onWarning`        | `(warning: Warning) => void`    | `console.warn`          | Called for failed fetches and cache errors — see [Warnings](#warnings).                                            |
 
 ### `Cache`
 
-The plugin treats the cache as a dumb async key/value store. TTL/staleness
-handling is performed by the plugin itself, so cache implementations stay
-trivial:
+The plugin treats the cache as a dumb key/value store. TTL/staleness handling
+is performed by the plugin itself, so cache implementations stay trivial:
 
 ```ts
 export interface CacheEntry {
@@ -151,7 +199,7 @@ Redis-backed cache are equally easy to write.
 ### Built-in caches
 
 ```ts
-import {lowdbCache, memoryCache} from 'rehype-external-link-title/cache'
+import {lowdbCache, memoryCache} from 'hast-plugin-external-title/cache'
 
 const persistent = lowdbCache({path: '.cache/titles.json'})
 const ephemeral  = memoryCache()
@@ -161,24 +209,83 @@ const ephemeral  = memoryCache()
   The file is opened lazily on first use (no top-level I/O).
 - **`memoryCache()`** — `Map`-backed; useful for tests or short-lived processes.
 
+## Warnings
+
+A link whose page cannot be fetched is not an error: the anchor is left
+untouched, the failure is cached (see `failureTtl`), and the build continues.
+You still want to know about it, so failures are reported through two channels:
+
+1. **`onWarning`** — the primary channel. Fires once per URL, with the
+   underlying cause. It defaults to `console.warn`, so problems are visible in
+   an `astro build`:
+
+   ```text
+   hast-plugin-external-title: failed to fetch title for https://example.com: HTTP 503: Service Unavailable
+   ```
+
+   Pass `onWarning: () => {}` to silence it, or route it into your own logger:
+
+   ```ts
+   externalTitle({
+     onWarning: ({message, url, cause}) => myLogger.warn({message, url, cause})
+   })
+   ```
+
+2. **`ctx.report()`** — Sätteri's own diagnostic channel, called once per
+   affected anchor per document with `severity: 'warning'`. This is deliberate
+   belt-and-braces: because resolution is deduplicated across the whole build,
+   a single failing URL is *observed* once but *affects* every document that
+   links to it.
+
+> [!NOTE]
+> As of `satteri@0.10.5`, diagnostics passed to `ctx.report()` are collected
+> and then discarded — they are not returned with the compile result and not
+> logged. That is why `onWarning` exists and why it is not silent by default.
+> The `ctx.report()` call is kept so this plugin reports properly the day
+> Sätteri surfaces diagnostics.
+
+## Caching and scope
+
+Sätteri calls your plugin factory **once**, and reuses the definition for every
+document. All of this plugin's state lives on the instance that
+`externalTitle()` returns:
+
+- the cache handle,
+- an in-memory map of already-resolved titles,
+- an in-flight map that collapses concurrent requests for the same URL,
+- the concurrency limiter.
+
+So a URL linked from fifty pages is fetched **once per build**, and
+`concurrency` is a cap for the whole build rather than for a single document.
+(Its rehype predecessor scoped both of these per document.)
+
+The practical consequence: create the plugin once, at config load, which is
+what the Astro example above does. If you register two separate instances, each
+gets its own limiter and its own in-memory dedupe — pass both the *same* `Cache`
+instance if you want them to share persisted results.
+
+An async visitor is entered for every matched anchor before any of them
+resolves, so the limiter — not the visitor — is what bounds outbound requests.
+Without it, a page with 200 links would issue 200 simultaneous fetches.
+
 ## Examples
 
 ### Custom cache path
 
 ```ts
-unified().use(rehypeExternalLinkTitle, {cache: '.cache/external-link-titles.json'})
+externalTitle({cache: '.cache/external-link-titles.json'})
 ```
 
 ### Refetch every entry older than a week
 
 ```ts
-unified().use(rehypeExternalLinkTitle, {ttl: 7 * 24 * 60 * 60 * 1000})
+externalTitle({ttl: 7 * 24 * 60 * 60 * 1000})
 ```
 
 ### Bring your own cache (Redis-style)
 
 ```ts
-import type {Cache, CacheEntry} from 'rehype-external-link-title'
+import type {Cache, CacheEntry} from 'hast-plugin-external-title'
 
 const redisCache: Cache = {
   async get(url) {
@@ -190,73 +297,96 @@ const redisCache: Cache = {
   },
   async delete(url) {
     await redis.del(`title:${url}`)
-  },
+  }
 }
 
-unified().use(rehypeExternalLinkTitle, {cache: redisCache})
+externalTitle({cache: redisCache})
 ```
 
 ### Custom User-Agent
 
 ```ts
-unified().use(rehypeExternalLinkTitle, {
-  fetch: {userAgent: 'MyCoolBlog/1.0 (+https://example.com/about)'},
+externalTitle({
+  fetch: {userAgent: 'MyCoolBlog/1.0 (+https://example.com/about)'}
 })
 ```
 
 ### Process only a subset of links
 
 ```ts
-unified().use(rehypeExternalLinkTitle, {
-  test: (href) => href.startsWith('https://en.wikipedia.org/'),
+externalTitle({
+  test: (href) => href.startsWith('https://en.wikipedia.org/')
 })
 ```
+
+## Limitations
+
+- **Raw HTML anchors are only processed with `features: {rawHtml: true}`.**
+  Without it, Sätteri keeps inline HTML as a `raw` node, so an author-written
+  `<a href="https://example.com">` is never visited. Markdown link syntax
+  always works.
+- **MDX JSX anchors are not processed.** `<a href="…">` in MDX becomes an
+  `mdxJsxTextElement` carrying `attributes`, not an `element` with
+  `properties`. Only real hast elements are visited.
+- **"External" is a string prefix test, not an origin comparison.** Absolute
+  links to your own domain are fetched too. Use `test` to exclude them.
+- **A link with no resolvable title gets no attributes at all** — not even
+  `data-title-updated-at` — so downstream code cannot distinguish "not
+  processed" from "processed, found nothing".
+- **The cache key is the href as written.** Two URLs that redirect to the same
+  page are cached separately.
 
 ## Types
 
 This package is fully typed with [TypeScript][]. It exports the additional
-types `Options`, `Cache`, `CacheEntry`, `FetchOptions`, and `LinkPredicate`.
+types `Options`, `ResolverOptions`, `Cache`, `CacheEntry`, `FetchOptions`,
+`LinkPredicate`, `TitleResolver`, and `Warning`.
 
 ## Compatibility
 
-Compatible with maintained versions of Node.js (>=18). Works with `unified`
-version 11+.
+Compatible with maintained versions of Node.js (>=20.19). Works with
+`satteri` 0.10.x and Astro v7+.
 
 ## Security
 
 This plugin sets the `title` attribute on `<a>` elements based on data fetched
-from third-party servers. While `title` is generally not an XSS vector
-(browsers do not interpret it as HTML), you should still pair this plugin with
-[`rehype-sanitize`][rehype-sanitize] downstream, configured to allow the
-`title` attribute on anchors:
+from third-party servers. `title` is generally not an XSS vector — browsers do
+not interpret it as HTML, and Sätteri escapes attribute values on output.
 
-```ts
-import rehypeSanitize, {defaultSchema} from 'rehype-sanitize'
+Unlike the rehype ecosystem, Sätteri has no downstream sanitizer equivalent to
+`rehype-sanitize`, so the internal sanitization is the whole defense: HTML
+returned by remote servers is sanitized with [DOMPurify][] (stripped down to
+`<html>`/`<head>`/`<title>` only) before the title is extracted, so malicious
+script tags in the source page are discarded before parsing.
 
-unified()
-  .use(rehypeExternalLinkTitle)
-  .use(rehypeSanitize, {
-    ...defaultSchema,
-    attributes: {
-      ...defaultSchema.attributes,
-      a: [...(defaultSchema.attributes?.a ?? []), 'title'],
-    },
-  })
-```
+Note that outbound requests have a per-request `timeout` (default 5 s) but **no
+response size cap and no `Content-Type` check** — a link pointing at a very
+large non-HTML file will be downloaded in full. Prefer a restrictive `test`
+predicate for untrusted link sources.
 
-The HTML returned by remote servers is sanitized internally with [DOMPurify][]
-(stripped down to `<html>`/`<head>`/`<title>` only) before the title is
-extracted, so malicious script tags in the source page are discarded before
-parsing.
+## Migrating from `rehype-external-link-title`
+
+This package is the Sätteri successor to `rehype-external-link-title`. The
+options are the same except where noted:
+
+| Change | Detail |
+| ------ | ------ |
+| Registration | `unified().use(plugin, options)` → `satteri({hastPlugins: [externalTitle(options)]})` |
+| Async | The compile is now async; `await` the result |
+| `test` | The `node` argument is now a **frozen** hast `Element`; mutating it throws |
+| `concurrency` | Now capped per plugin instance (per build), not per document |
+| Deduplication | Now spans the whole build, not a single document |
+| Warnings | `vfile` messages → `onWarning` (defaulting to `console.warn`) plus `ctx.report()` |
+| Raw HTML | Requires `features: {rawHtml: true}`; previously handled via `rehype-raw` |
 
 ## License
 
 [MIT][license] © [Ari Palo][author]
 
-[unified]: https://github.com/unifiedjs/unified
-[rehype]: https://github.com/rehypejs/rehype
+[satteri]: https://satteri.bruits.org
+[satteri-plugins]: https://satteri.bruits.org/docs/plugins/
+[astro]: https://astro.build
 [hast]: https://github.com/syntax-tree/hast
-[rehype-sanitize]: https://github.com/rehypejs/rehype-sanitize
 [lowdb]: https://github.com/typicode/lowdb
 [esm]: https://gist.github.com/sindresorhus/a39789f98801d908bbc7ff3ecc99d99c
 [typescript]: https://www.typescriptlang.org

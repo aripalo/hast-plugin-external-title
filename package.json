@@ -1,7 +1,7 @@
 {
-  "name": "rehype-external-link-title",
+  "name": "hast-plugin-external-title",
   "version": "0.1.0",
-  "description": "rehype plugin that fetches the page title of external links and sets it as the `title` attribute, with pluggable caching.",
+  "description": "Sätteri hast plugin that fetches the page title of external links and sets it as the `title` attribute, with pluggable caching.",
   "license": "MIT",
   "author": {
     "name": "Ari Palo",
@@ -35,36 +35,36 @@
   "packageManager": "pnpm@10.28.2",
   "scripts": {
     "build": "tsdown",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "prepack": "pnpm build",
     "prepublishOnly": "pnpm typecheck && pnpm test"
   },
   "dependencies": {
+    "@types/hast": "^3.0.5",
     "cheerio": "^1.2.0",
     "isomorphic-dompurify": "^2.36.0",
-    "lowdb": "^7.0.1",
-    "unist-util-visit": "^5.1.0",
-    "vfile": "^6.0.3"
+    "lowdb": "^7.0.1"
   },
   "peerDependencies": {
-    "unified": ">=11"
+    "satteri": "^0.10.0"
   },
   "devDependencies": {
-    "@types/hast": "^3.0.4",
     "@types/node": "^22.0.0",
+    "satteri": "^0.10.5",
     "tsdown": "^0.21.9",
     "typescript": "^5.6.0",
-    "unified": "^11.0.5",
     "vitest": "^4.0.18"
   },
   "keywords": [
-    "rehype",
-    "rehype-plugin",
-    "unified",
-    "html",
+    "satteri",
+    "satteri-plugin",
     "hast",
+    "hast-plugin",
+    "astro",
+    "markdown",
+    "html",
     "external-links",
     "title",
     "metadata",
@@ -73,11 +73,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aripalo/rehype-external-link-title.git"
+    "url": "git+https://github.com/aripalo/hast-plugin-external-title.git"
   },
   "bugs": {
-    "url": "https://github.com/aripalo/rehype-external-link-title/issues",
+    "url": "https://github.com/aripalo/hast-plugin-external-title/issues",
     "email": "opensource@aripalo.com"
   },
-  "homepage": "https://github.com/aripalo/rehype-external-link-title#readme"
+  "homepage": "https://github.com/aripalo/hast-plugin-external-title#readme"
 }
