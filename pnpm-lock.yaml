@@ -53,6 +53,9 @@ importers:
       conventional-changelog-conventionalcommits:
         specifier: ^9.3.1
         version: 9.3.1
+      npm:
+        specifier: ^11.19.0
+        version: 11.19.0
       satteri:
         specifier: ^0.10.5
         version: 0.10.5

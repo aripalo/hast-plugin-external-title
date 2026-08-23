@@ -63,6 +63,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Report the npm that will publish
+        # @semantic-release/npm shells out to `npm publish` with execa's
+        # `preferLocal`, which resolves node_modules/.bin/npm before PATH. npm
+        # performs the OIDC token exchange itself and needs >=11.5.1 to do it;
+        # an older npm fails with a bare ENEEDAUTH and no mention of OIDC,
+        # which is near-impossible to diagnose after the fact. `npm` is a
+        # devDependency precisely so this is pinned, so print what resolved.
+        run: |
+          echo "local  : $(node_modules/.bin/npm --version) ($(readlink -f node_modules/.bin/npm))"
+          echo "on PATH: $(npm --version) ($(command -v npm))"
+
       - name: Release
         # No NPM_TOKEN: authentication is npm trusted publishing over OIDC,
         # which also generates the provenance attestation automatically.
