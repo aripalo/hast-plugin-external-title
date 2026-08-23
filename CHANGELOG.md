@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/aripalo/hast-plugin-external-title/compare/v1.0.0...v1.0.1) (2026-08-23)
+
+### Bug Fixes
+
+* **ci:** pin the npm that publishes so trusted publishing works ([aafd04a](https://github.com/aripalo/hast-plugin-external-title/commit/aafd04a28e12df8707a96b6761896a3316064d3d))
+
 ## 1.0.0 (2026-08-23)
 
 ### ⚠ BREAKING CHANGES
