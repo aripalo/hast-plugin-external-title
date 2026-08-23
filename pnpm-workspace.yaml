@@ -1,6 +1,19 @@
 # pnpm settings for this single-package repository. pnpm 11 reads `overrides`
-# from here rather than from package.json.
-#
+# and `allowBuilds` from here rather than from package.json.
+
+# Install scripts, reviewed explicitly. pnpm blocks any script it has not been
+# told about, so every entry here is a deliberate decision.
+allowBuilds:
+  # Allowed: esbuild's postinstall verifies and links the platform binary that
+  # Vite and Astro shell out to. The matching @esbuild/<platform> package is
+  # installed as an optional dependency, so it is close to a no-op — but
+  # esbuild is load-bearing for the Astro integration build, so let it check.
+  esbuild: true
+  # Skipped: msw's postinstall copies a Service Worker into a public/ directory
+  # for *browser* mocking. This repo only uses `msw/node`, which patches
+  # globalThis.fetch and needs no worker file on disk.
+  msw: false
+
 # These force patched versions of transitive dev dependencies flagged by
 # `pnpm audit`. All of them arrive through vitest -> vite -> postcss -> nanoid,
 # so none reaches the published package — `dependencies` is only @types/hast,

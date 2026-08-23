@@ -5,3 +5,10 @@ coverage/
 *.log
 .DS_Store
 .pnpm-store/
+# Byproducts of the Astro integration build (test/integration/astro.test.ts).
+# `.astro/` comes from `sync`, which build() always runs; `node_modules/` is
+# Vite's cache dir, which Astro derives from the project root, not `cacheDir`.
+test/fixtures/astro/.astro/
+test/fixtures/astro/.cache/
+test/fixtures/astro/.output/
+test/fixtures/astro/node_modules/

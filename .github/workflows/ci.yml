@@ -92,3 +92,30 @@ jobs:
       - name: Verify the package contents
         # Catches an `exports`/`files` mistake before it reaches a release.
         run: pnpm pack --pack-destination "${RUNNER_TEMP}"
+
+  integration:
+    name: Astro integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Astro integration test
+        # Deliberately its own job on a single Node version, not part of the
+        # `test` matrix. This boots a real Astro build to prove the plugin works
+        # through `markdown.processor` — it exercises Astro's wiring, not this
+        # package's Node compatibility, so running it three times proves
+        # nothing extra. Keeping it out of `test:coverage` also keeps an Astro
+        # or Rolldown hiccup off the release path, since `prepublishOnly` runs
+        # that script.
+        run: pnpm test:integration

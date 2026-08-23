@@ -172,11 +172,15 @@ async function readDocumentHead(
       if (bytes >= maxBytes) break;
     }
   } finally {
-    try {
-      await reader.cancel();
-    } catch {
-      // Already closed or errored; the read result is what matters.
-    }
+    // Best-effort, and deliberately not awaited. Releasing the socket is
+    // cleanup; the text we already have is the result. Awaiting it means a
+    // stream whose `cancel()` never settles hangs this call forever, and the
+    // request's deadline cannot rescue it because the response has already
+    // been delivered. (MSW's mocked bodies behave exactly that way, which is
+    // how this was found.)
+    void reader.cancel().catch(() => {
+      // Already closed or errored; nothing left to release.
+    });
   }
 
   throw new Error(
