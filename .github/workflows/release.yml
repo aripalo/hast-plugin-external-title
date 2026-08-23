@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never let two releases run at once, and never cancel one midway: a release
+# that dies between publishing and tagging leaves the repo inconsistent.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    # npm trusted publishing is bound to this environment. The OIDC token
+    # carries the environment name, and npm rejects a publish that does not
+    # come from the configured workflow + environment pair.
+    environment:
+      name: production
+      url: https://www.npmjs.com/package/hast-plugin-external-title
+
+    permissions:
+      contents: write # create tags, push the changelog commit, cut releases
+      issues: write # comment on released issues
+      pull-requests: write # comment on released pull requests
+      id-token: write # OIDC for npm trusted publishing and provenance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # semantic-release needs the full history and all tags to work out
+          # the previous release and which commits are new.
+          fetch-depth: 0
+          # semantic-release authenticates its own pushes with GITHUB_TOKEN;
+          # leaving checkout's credentials behind would conflict with that.
+          persist-credentials: false
+
+      # Installs pnpm and Node in one step, replacing actions/setup-node. The
+      # pnpm version is read from the `packageManager` field, so CI cannot
+      # drift from local.
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          runtime: node@24 # semantic-release 25 needs ^22.14.0 || >=24.10.0
+          # Deliberately uncached. This job can mint an npm publish token, and
+          # GitHub advises against dependency caching in jobs with elevated
+          # privileges. A release runs rarely, so the saved seconds are not
+          # worth widening its supply-chain surface. CI does cache, where the
+          # benefit is real and the privileges are not.
+          cache: false
+          # Install explicitly below, so --frozen-lockfile is guaranteed rather
+          # than inferred from CI detection.
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Release
+        # No NPM_TOKEN: authentication is npm trusted publishing over OIDC,
+        # which also generates the provenance attestation automatically.
+        # `npm publish` runs `prepack` (build) and `prepublishOnly`
+        # (typecheck + coverage), so the artifact is verified as it ships.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec semantic-release

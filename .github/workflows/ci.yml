@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Only the newest run per ref matters; cancel superseded ones.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test on Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor declared in package.json `engines`; this is what
+        # keeps that claim honest. Coverage is excluded here because
+        # @vitest/coverage-v8 requires Node ^22.14 || >=24.10 — it runs in the
+        # `verify` job instead.
+        #
+        # pnpm 11 itself requires Node >=22.13, but that does not constrain
+        # this matrix: pnpm/setup installs pnpm's native per-platform
+        # executable, which does not run on Node at all, and then installs the
+        # runtime under test separately.
+        node: ['20', '22', '24']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Installs pnpm and Node in one step, replacing actions/setup-node. The
+      # pnpm version is read from the `packageManager` field, so CI cannot
+      # drift from local.
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          runtime: node@${{ matrix.node }}
+          cache: true
+          # Install explicitly below, so --frozen-lockfile is guaranteed rather
+          # than inferred from CI detection.
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+
+  verify:
+    name: Typecheck, coverage and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test with coverage
+        # Thresholds are set to 100% in vitest.config.ts, so this fails the
+        # build if coverage regresses.
+        run: pnpm test:coverage
+
+      - name: Build
+        run: pnpm build
+
+      - name: Verify the package contents
+        # Catches an `exports`/`files` mistake before it reaches a release.
+        run: pnpm pack --pack-destination "${RUNNER_TEMP}"

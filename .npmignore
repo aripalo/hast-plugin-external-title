@@ -26,3 +26,6 @@ tsconfig.app.json
 .claude
 AGENTS.md
 CLAUDE.md
+release.config.mjs
+vitest.config.ts
+tsconfig.test.json

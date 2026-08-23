@@ -28,6 +28,7 @@ of unified/remark/rehype.
 - [Compatibility](#compatibility)
 - [Security](#security)
 - [Migrating from `rehype-external-link-title`](#migrating-from-rehype-external-link-title)
+- [Releases](#releases)
 - [License](#license)
 
 ## What is this?
@@ -401,6 +402,11 @@ types `Options`, `ResolverOptions`, `Cache`, `CacheEntry`, `FetchOptions`,
 Compatible with maintained versions of Node.js (>=20.19). Works with
 `satteri` 0.10.x and Astro v7+.
 
+Note that *contributing* has a higher floor than *using*: the repository's
+toolchain is pinned to pnpm 11 via `packageManager`, and pnpm 11 requires
+Node >=22.13. That does not affect consumers of the published package, and CI
+still runs the test suite on Node 20 to keep the range above honest.
+
 ## Security
 
 This plugin puts text from third-party servers into your pages, so it is worth
@@ -464,10 +470,66 @@ options are the same except where noted:
 | Partial reads | A head that never closes is an error, not a partial title |
 | `attribute` | Event handlers, URL attributes and `style` are now rejected |
 
+## Releases
+
+Releases are automated with [semantic-release][] and driven entirely by
+[Conventional Commits][]. Merging to `main` runs the release workflow; the
+commit types since the last tag decide whether anything ships and what the next
+version is.
+
+| Commit | Effect |
+| ------ | ------ |
+| `fix: …` | patch release |
+| `feat: …` | minor release |
+| `feat!: …` / `BREAKING CHANGE:` footer | major release |
+| `perf: …`, `revert: …`, `docs(readme): …` | patch release |
+| `docs: …`, `build: …`, `ci: …`, `chore: …`, `refactor: …`, `style: …`, `test: …` | no release |
+
+A commit that does not parse as a Conventional Commit is ignored, so a typo in
+the type means no release rather than a wrong one.
+
+Publishing uses [npm trusted publishing][] over OIDC from the `production`
+GitHub environment. There is no npm token anywhere in the repository or its
+secrets, and provenance attestations are generated automatically — trusted
+publishing implies them, so no `--provenance` flag is needed.
+
+The workflows pin every action to a commit SHA with the tag in a trailing
+comment, and Dependabot keeps both in sync. pnpm and Node are provisioned by
+[`pnpm/setup`][], which reads the pnpm version from `packageManager` so CI
+cannot drift from local.
+
+### One-time setup
+
+Not automatable, and required before the first release:
+
+1. Create the `production` environment under **Settings → Environments**.
+   Optionally add reviewers to gate publishing.
+2. Configure the trusted publisher on npm, under the package's
+   **Settings → Trusted Publisher**: owner `aripalo`, repository
+   `hast-plugin-external-title`, workflow `release.yml`, environment
+   `production`.
+3. Tag the current commit `v0.1.0` and push the tag, so semantic-release
+   continues the `0.x` line instead of starting at `1.0.0`:
+
+   ```sh
+   git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0
+   ```
+
+   The tag must be reachable from `main`. If the branch is squash-merged, the
+   tagged commit will not be in `main`'s history — re-create the tag on `main`
+   afterwards.
+4. If `main` is protected, allow the release workflow to push the changelog
+   commit, or drop `@semantic-release/git` from `release.config.mjs` and let the
+   GitHub release be the only changelog.
+
 ## License
 
 [MIT][license] © [Ari Palo][author]
 
+[`pnpm/setup`]: https://github.com/pnpm/setup
+[semantic-release]: https://semantic-release.org
+[conventional commits]: https://www.conventionalcommits.org
+[npm trusted publishing]: https://docs.npmjs.com/trusted-publishers
 [satteri]: https://satteri.bruits.org
 [satteri-plugins]: https://satteri.bruits.org/docs/plugins/
 [astro]: https://astro.build
