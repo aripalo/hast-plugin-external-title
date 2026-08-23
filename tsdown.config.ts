@@ -8,7 +8,7 @@ export default defineConfig({
   outDir: 'dist',
   format: 'esm',
   platform: 'node',
-  target: 'node20.19',
+  target: 'node22.11',
   dts: true,
   sourcemap: true,
   clean: true,

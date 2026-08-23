@@ -62,7 +62,7 @@ You probably **shouldn't** use it if:
 
 ## Install
 
-This package is [ESM only][esm]. In Node.js (version 20.19+):
+This package is [ESM only][esm]. In Node.js (version 22.11+):
 
 ```sh
 npm install hast-plugin-external-title
@@ -399,16 +399,17 @@ types `Options`, `ResolverOptions`, `Cache`, `CacheEntry`, `FetchOptions`,
 
 ## Compatibility
 
-Compatible with maintained versions of Node.js (>=20.19). Works with
-`satteri` 0.10.x and Astro v7+.
+Requires Node.js >=22.11 — the earliest LTS of the Node 22 line. Node 20 is
+end-of-life and no longer supported. Works with `satteri` 0.10.x and Astro v7+.
 
-Note that *contributing* has a higher floor than *using*: the repository's
-toolchain is pinned to pnpm 11 via `packageManager`, and pnpm 11 requires
-Node >=22.13. That development requirement is declared as
-`devEngines.runtime` (`>=22.13 <27`), so pnpm warns when you are outside it.
-It is a warning rather than an error on purpose — CI runs the test suite on
-Node 20 to keep the supported range above honest, and that must not fail the
-install. None of this affects consumers of the published package.
+CI runs the test suite on 22.11.0 exactly, so the floor above is verified
+rather than assumed, plus the latest 22.x and 24.x.
+
+Contributing has a marginally higher floor than using: the repository's
+toolchain is pinned to pnpm 11 via `packageManager`, and pnpm 11 needs
+Node >=22.13. That is declared as `devEngines.runtime` (`>=22.13 <27`), so pnpm
+warns outside it — a warning rather than an error on purpose, so testing the
+package's own floor does not fail the install. None of it affects consumers.
 
 ## Security
 

@@ -21,21 +21,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 20 is the floor declared in package.json `engines`; this is what
-        # keeps that claim honest. Coverage is excluded here because
-        # @vitest/coverage-v8 requires Node ^22.14 || >=24.10 — it runs in the
-        # `verify` job instead.
+        # 22.11.0 is pinned exactly because it is the floor declared in
+        # package.json `engines` — the earliest LTS of the Node 22 line. A bare
+        # `22` would resolve to the newest 22.x and never actually exercise the
+        # claim. The other two track the latest 22.x and 24.x.
+        #
+        # Coverage is excluded from this job because @vitest/coverage-v8
+        # requires Node ^22.14 || >=24.10 and so cannot run on the floor; it
+        # runs in `verify` instead.
         #
         # pnpm 11 itself requires Node >=22.13, but that does not constrain
         # this matrix: pnpm/setup installs pnpm's native per-platform
         # executable, which does not run on Node at all, and then installs the
         # runtime under test separately.
         #
-        # The Node 20 job prints a pnpm warning that it is below the
-        # `devEngines.runtime` floor. That is expected and intentional here —
+        # The 22.11.0 job prints a pnpm warning that it is below the
+        # `devEngines.runtime` floor. That is expected and intentional —
         # `onFail` is `warn` precisely so testing the package's minimum
         # supported runtime does not fail the install.
-        node: ['20', '22', '24']
+        node: ['22.11.0', '22', '24']
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

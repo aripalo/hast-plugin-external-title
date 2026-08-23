@@ -30,7 +30,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.11.0"
   },
   "packageManager": "pnpm@11.23.0",
   "devEngines": {
@@ -65,14 +65,14 @@
     "@semantic-release/github": "^12.0.9",
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.1",
-    "@types/node": "^22.0.0",
+    "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "4.1.11",
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "satteri": "^0.10.5",
     "semantic-release": "^25.0.9",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.11"
   },
   "keywords": [
     "satteri",
