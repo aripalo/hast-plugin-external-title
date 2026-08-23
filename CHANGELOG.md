@@ -1,3 +1,9 @@
+## [1.0.2](https://github.com/aripalo/hast-plugin-external-title/compare/v1.0.1...v1.0.2) (2026-08-23)
+
+### Bug Fixes
+
+* stop awaiting the response body cancel ([73c1f37](https://github.com/aripalo/hast-plugin-external-title/commit/73c1f37e5fbd18a2eacc7c212d3ac5de9f85f964))
+
 ## [1.0.1](https://github.com/aripalo/hast-plugin-external-title/compare/v1.0.0...v1.0.1) (2026-08-23)
 
 ### Bug Fixes

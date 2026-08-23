@@ -1,7 +1,7 @@
 {
   "name": "hast-plugin-external-title",
-  "version": "1.0.1",
-  "description": "S\u00e4tteri hast plugin that fetches the page title of external links and sets it as the `title` attribute, with pluggable caching.",
+  "version": "1.0.2",
+  "description": "Sätteri hast plugin that fetches the page title of external links and sets it as the `title` attribute, with pluggable caching.",
   "license": "MIT",
   "author": {
     "name": "Ari Palo",
