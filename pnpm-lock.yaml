@@ -63,8 +63,8 @@ importers:
         specifier: ^2.15.0
         version: 2.15.0(@types/node@22.20.1)(typescript@7.0.2)
       npm:
-        specifier: ^11.19.0
-        version: 11.19.0
+        specifier: ^12.0.2
+        version: 12.0.2
       satteri:
         specifier: ^0.10.5
         version: 0.10.5
@@ -2531,6 +2531,80 @@ packages:
       - cacache
       - chalk
       - ci-info
+      - fastest-levenshtein
+      - fs-minipass
+      - glob
+      - graceful-fs
+      - hosted-git-info
+      - ini
+      - init-package-json
+      - is-cidr
+      - json-parse-even-better-errors
+      - libnpmaccess
+      - libnpmdiff
+      - libnpmexec
+      - libnpmfund
+      - libnpmorg
+      - libnpmpack
+      - libnpmpublish
+      - libnpmsearch
+      - libnpmteam
+      - libnpmversion
+      - make-fetch-happen
+      - minimatch
+      - minipass
+      - minipass-pipeline
+      - ms
+      - node-gyp
+      - nopt
+      - npm-audit-report
+      - npm-install-checks
+      - npm-package-arg
+      - npm-pick-manifest
+      - npm-profile
+      - npm-registry-fetch
+      - npm-user-validate
+      - p-map
+      - pacote
+      - parse-conflict-json
+      - proc-log
+      - qrcode-terminal
+      - read
+      - semver
+      - spdx-expression-parse
+      - ssri
+      - supports-color
+      - tar
+      - text-table
+      - tiny-relative-date
+      - treeverse
+      - validate-npm-package-name
+      - which
+
+  npm@12.0.2:
+    resolution: {integrity: sha512-uIXokLlBj6FpNUTQX1PmT5pz7BlIN9QlixX+zdaSNHsd0qUXsbDLr50xzY6Sw7cJVr0uzHKDOle0swmPW/p5Qw==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
+    hasBin: true
+    bundledDependencies:
+      - '@isaacs/string-locale-compare'
+      - '@npmcli/arborist'
+      - '@npmcli/config'
+      - '@npmcli/fs'
+      - '@npmcli/git'
+      - '@npmcli/map-workspaces'
+      - '@npmcli/metavuln-calculator'
+      - '@npmcli/package-json'
+      - '@npmcli/promise-spawn'
+      - '@npmcli/redact'
+      - '@npmcli/run-script'
+      - '@sigstore/tuf'
+      - abbrev
+      - archy
+      - bin-links
+      - cacache
+      - chalk
+      - ci-info
+      - diff
       - fastest-levenshtein
       - fs-minipass
       - glob
@@ -5851,6 +5925,8 @@ snapshots:
       unicorn-magic: 0.3.0
 
   npm@11.19.0: {}
+
+  npm@12.0.2: {}
 
   nth-check@2.1.1:
     dependencies:
