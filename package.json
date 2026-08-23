@@ -52,7 +52,7 @@
   "dependencies": {
     "@types/hast": "^3.0.5",
     "cheerio": "^1.2.0",
-    "isomorphic-dompurify": "^2.36.0",
+    "isomorphic-dompurify": "^3.22.0",
     "lowdb": "^7.0.1"
   },
   "peerDependencies": {
