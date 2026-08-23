@@ -10,22 +10,32 @@ const realFetch = globalThis.fetch;
 /** Records every URL passed to the stubbed `fetch`. */
 let requested: string[] = [];
 
-/** Installs a `fetch` stub returning `<title>` derived from the URL host. */
-function stubFetch(
-  handler: (url: string) => { status?: number; body?: string } | Error
-): void {
+interface StubResult {
+  status?: number;
+  body?: string;
+  contentType?: string | null;
+}
+
+/**
+ * Installs a `fetch` stub built on real `Response` objects, so the code under
+ * test gets genuine headers and a genuine body stream.
+ */
+function stubFetch(handler: (url: string) => StubResult | Error): void {
   globalThis.fetch = vi.fn(async (input: unknown) => {
     const url = String(input);
     requested.push(url);
     const result = handler(url);
     if (result instanceof Error) throw result;
-    const status = result.status ?? 200;
-    return {
-      ok: status >= 200 && status < 300,
-      status,
-      statusText: status === 200 ? 'OK' : 'Error',
-      text: async () => result.body ?? '',
-    };
+
+    const contentType =
+      result.contentType === undefined
+        ? 'text/html; charset=utf-8'
+        : result.contentType;
+
+    return new Response(result.body ?? '', {
+      status: result.status ?? 200,
+      headers: contentType === null ? {} : { 'content-type': contentType },
+    });
   }) as unknown as typeof fetch;
 }
 
@@ -131,6 +141,31 @@ describe('hastPluginExternalTitle', () => {
     stubFetch(() => ({ body: '<html><head></head><body>no title</body></html>' }));
 
     const { html } = await compile('[x](https://untitled.example.com)');
+
+    expect(html).not.toContain('title=');
+  });
+
+  it('leaves the anchor unchanged for a non-HTML content-type', async () => {
+    stubFetch(() => ({
+      contentType: 'application/pdf',
+      body: '%PDF-1.7 not html',
+    }));
+
+    const warnings: string[] = [];
+    const { html } = await compile('[x](https://doc.example.com/paper.pdf)', {
+      onWarning: (warning) => warnings.push(warning.message),
+    });
+
+    expect(html).not.toContain('title=');
+    expect(warnings.some((m) => m.includes('unsupported content-type'))).toBe(
+      true
+    );
+  });
+
+  it('leaves the anchor unchanged when the response has no content-type', async () => {
+    stubFetch(() => ({ contentType: null, body: '<title>Hidden</title>' }));
+
+    const { html } = await compile('[x](https://headerless.example.com)');
 
     expect(html).not.toContain('title=');
   });
@@ -250,13 +285,10 @@ describe('hastPluginExternalTitle', () => {
       observedMax = Math.max(observedMax, inFlight);
       await new Promise((resolve) => setTimeout(resolve, 5));
       inFlight--;
-      return {
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: async () =>
-          `<html><title>${new URL(String(input)).host}</title></html>`,
-      };
+      return new Response(
+        `<html><head><title>${new URL(String(input)).host}</title></head></html>`,
+        { headers: { 'content-type': 'text/html' } }
+      );
     }) as unknown as typeof fetch;
 
     const links = Array.from(

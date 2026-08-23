@@ -7,6 +7,7 @@ vi.mock('../src/fetch-html.js', () => ({
   fetchHtml: (...args: unknown[]) => mockFetchHtml(...args),
   DEFAULT_USER_AGENT: 'Mozilla/5.0 (compatible; TitleFetcher/1.0)',
   DEFAULT_TIMEOUT: 5000,
+  DEFAULT_MAX_BYTES: 256 * 1024,
 }));
 
 vi.mock('../src/parse-title.js', () => ({

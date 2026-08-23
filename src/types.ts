@@ -34,15 +34,53 @@ export interface Cache {
 
 /** Options forwarded to the internal HTTP client. */
 export interface FetchOptions {
-  /** Per-request timeout in milliseconds. Default: 5000. */
+  /**
+   * Total request deadline in milliseconds, covering both the response
+   * headers and the body read.
+   *
+   * A server that sends headers and then stalls mid-body is therefore bounded
+   * by this too, not just one that is slow to respond.
+   *
+   * Fractional values are floored, and `NaN` or non-positive values fall back
+   * to the default. `Infinity` clamps to the platform maximum, which is the
+   * closest thing to "no deadline".
+   *
+   * Default: `5000`.
+   */
   timeout?: number;
+
   /**
    * `User-Agent` header value sent on every request.
    * Default: `'Mozilla/5.0 (compatible; TitleFetcher/1.0)'`.
    */
   userAgent?: string;
-  /** Optional `AbortSignal` to cancel the request. */
+
+  /**
+   * Optional `AbortSignal` to cancel requests.
+   *
+   * Honored *in addition to* `timeout` — supplying one does not disable the
+   * deadline. Because it lives in plugin options that Sätteri reuses for the
+   * whole build, treat it as a build-wide cancellation switch rather than a
+   * per-request one: once it aborts, every later request fails too.
+   */
   signal?: AbortSignal;
+
+  /**
+   * Maximum bytes read from the response body before giving up.
+   *
+   * Reading normally stops much earlier — as soon as a complete `<title>`
+   * element or the end of the `<head>` arrives — so this is a backstop for
+   * documents that never close their head. The bound is approximate: reading
+   * stops after the chunk that crosses the threshold, so memory is bounded by
+   * `maxBytes` plus one chunk.
+   *
+   * Clamped to `[1024, 1048576]`, and `NaN` falls back to the default. The
+   * ceiling is deliberate: the stop-marker search re-scans the accumulated
+   * text once per chunk, so its cost grows with the square of this value.
+   *
+   * Default: `262144` (256 KiB).
+   */
+  maxBytes?: number;
 }
 
 /**

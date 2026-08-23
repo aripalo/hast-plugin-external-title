@@ -21,6 +21,7 @@ of unified/remark/rehype.
   - [Built-in caches](#built-in-caches)
 - [Warnings](#warnings)
 - [Caching and scope](#caching-and-scope)
+- [Fetching](#fetching)
 - [Examples](#examples)
 - [Limitations](#limitations)
 - [Types](#types)
@@ -172,7 +173,7 @@ Configuration (TypeScript type).
 | `attribute`        | `string`                        | `'title'`               | Attribute name written on the link element.                                                                        |
 | `includeUpdatedAt` | `boolean`                       | `true`                  | Whether to also write `data-title-updated-at` (ISO timestamp).                                                     |
 | `concurrency`      | `number`                        | `8`                     | Maximum concurrent outbound fetches **per plugin instance** — see [Caching and scope](#caching-and-scope).          |
-| `fetch`            | `FetchOptions`                  | see below               | Options forwarded to the internal HTTP client (`timeout`, `userAgent`, `signal`).                                   |
+| `fetch`            | `FetchOptions`                  | see below               | Options forwarded to the internal HTTP client (`timeout`, `userAgent`, `signal`, `maxBytes`) — see [Fetching](#fetching). |
 | `onWarning`        | `(warning: Warning) => void`    | `console.warn`          | Called for failed fetches and cache errors — see [Warnings](#warnings).                                            |
 
 ### `Cache`
@@ -268,6 +269,36 @@ An async visitor is entered for every matched anchor before any of them
 resolves, so the limiter — not the visitor — is what bounds outbound requests.
 Without it, a page with 200 links would issue 200 simultaneous fetches.
 
+## Fetching
+
+Only the `<title>` is ever used, and it lives in `<head>`, so requests are kept
+deliberately small:
+
+- **Content type is checked first.** Only `text/html` and
+  `application/xhtml+xml` are read. Anything else — including a response with
+  no `Content-Type` header at all — is treated as a failure, and **not one byte
+  of the body is consumed**. This keeps PDFs, images and downloads out of the
+  HTML parser entirely.
+- **Reading stops at the end of the head.** As soon as a complete `<title>`
+  element or a closing `</head>` arrives, the read stops. On a page with a
+  large body this transfers a small fraction of the bytes, which bounds both
+  memory and the cost of parsing. Nothing is appended to the partial document —
+  HTML parsers close open elements at end-of-input on their own.
+- **`maxBytes` (default 256 KiB) is a backstop**, not the main mechanism. It
+  only matters for a malformed document that never closes its head. The bound
+  is approximate — reading stops after the chunk that crosses the threshold —
+  and it is clamped to `[1 KiB, 1 MiB]`, because the stop-marker search costs
+  roughly the square of it.
+- **`timeout` (default 5 s) is a total deadline** covering the response headers
+  *and* the body read. A server that sends headers and then stalls mid-body is
+  bounded by it too.
+- **`signal` is honored in addition to `timeout`.** Because plugin options are
+  reused for the whole build, treat it as a build-wide cancellation switch: once
+  it aborts, every later request fails as well.
+
+Redirects follow `fetch`'s defaults. The cache key is the href as written, so a
+redirect chain does not fragment the cache.
+
 ## Examples
 
 ### Custom cache path
@@ -321,10 +352,19 @@ externalTitle({
 
 ## Limitations
 
-- **Raw HTML anchors are only processed with `features: {rawHtml: true}`.**
-  Without it, Sätteri keeps inline HTML as a `raw` node, so an author-written
-  `<a href="https://example.com">` is never visited. Markdown link syntax
-  always works.
+- **Raw HTML anchors are ignored unless you opt in.** By default Sätteri keeps
+  inline HTML as an opaque `raw` node, so an author-written
+  `<a href="https://example.com">` is passed through untouched and this plugin
+  never sees it. To have those anchors processed too, enable the parser feature:
+
+  ```js
+  processor: satteri({
+    features: {rawHtml: true},
+    hastPlugins: [externalTitle()]
+  })
+  ```
+
+  Markdown link syntax (`[text](url)`) works either way.
 - **MDX JSX anchors are not processed.** `<a href="…">` in MDX becomes an
   `mdxJsxTextElement` carrying `attributes`, not an `element` with
   `properties`. Only real hast elements are visited.
@@ -335,6 +375,10 @@ externalTitle({
   processed" from "processed, found nothing".
 - **The cache key is the href as written.** Two URLs that redirect to the same
   page are cached separately.
+- **A `<title>` outside `<head>` is not found.** Reading stops at the end of the
+  head (see [Fetching](#fetching)), so a title misplaced in the body is missed.
+- **A response with no `Content-Type` is treated as a failure**, and negatively
+  cached for `failureTtl`. Set `failureTtl: 0` to retry such links every build.
 
 ## Types
 
@@ -359,10 +403,11 @@ returned by remote servers is sanitized with [DOMPurify][] (stripped down to
 `<html>`/`<head>`/`<title>` only) before the title is extracted, so malicious
 script tags in the source page are discarded before parsing.
 
-Note that outbound requests have a per-request `timeout` (default 5 s) but **no
-response size cap and no `Content-Type` check** — a link pointing at a very
-large non-HTML file will be downloaded in full. Prefer a restrictive `test`
-predicate for untrusted link sources.
+Outbound requests are bounded on three axes, described in
+[Fetching](#fetching): only HTML content types are read at all, reading stops
+at the end of the document's `<head>`, and a single deadline covers the whole
+request including the body. For untrusted link sources, prefer a restrictive
+`test` predicate on top of that.
 
 ## Migrating from `rehype-external-link-title`
 
@@ -378,6 +423,10 @@ options are the same except where noted:
 | Deduplication | Now spans the whole build, not a single document |
 | Warnings | `vfile` messages → `onWarning` (defaulting to `console.warn`) plus `ctx.report()` |
 | Raw HTML | Requires `features: {rawHtml: true}`; previously handled via `rehype-raw` |
+| `fetch.timeout` | Now a total deadline covering headers *and* body, not just the response |
+| `fetch.signal` | No longer disables `timeout`; both apply |
+| Content type | Only HTML responses are read; a missing `Content-Type` is now a failure |
+| Body reads | Stop at the end of `<head>` instead of downloading the whole page |
 
 ## License
 
