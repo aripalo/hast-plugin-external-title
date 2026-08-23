@@ -28,6 +28,11 @@ updates:
       dev-dependencies:
         dependency-type: development
         patterns: ['*']
+        # Only minor and patch are grouped. Majors are deliberately left
+        # ungrouped so each arrives as its own reviewable pull request -- a
+        # grouped bump once carried TypeScript 5 -> 7 along with four routine
+        # updates, which is not something to skim past.
+        update-types: ['minor', 'patch']
     ignore:
       # Held on 9.x deliberately: 10.x requires
       # conventional-changelog-writer@9, which
@@ -35,7 +40,8 @@ updates:
       # comment in release.config.mjs.
       - dependency-name: conventional-changelog-conventionalcommits
         update-types: ['version-update:semver-major']
-      # Bumping this would silently change the published package's supported
-      # Node range; do it deliberately.
+      # @types/node majors track Node majors. Staying on the major that matches
+      # `engines` keeps the type checker from quietly accepting an API that is
+      # newer than the runtimes this package claims to support.
       - dependency-name: '@types/node'
         update-types: ['version-update:semver-major']
