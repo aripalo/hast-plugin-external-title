@@ -30,6 +30,11 @@ jobs:
         # this matrix: pnpm/setup installs pnpm's native per-platform
         # executable, which does not run on Node at all, and then installs the
         # runtime under test separately.
+        #
+        # The Node 20 job prints a pnpm warning that it is below the
+        # `devEngines.runtime` floor. That is expected and intentional here —
+        # `onFail` is `warn` precisely so testing the package's minimum
+        # supported runtime does not fail the install.
         node: ['20', '22', '24']
     steps:
       - name: Checkout

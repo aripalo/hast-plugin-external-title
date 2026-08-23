@@ -404,8 +404,11 @@ Compatible with maintained versions of Node.js (>=20.19). Works with
 
 Note that *contributing* has a higher floor than *using*: the repository's
 toolchain is pinned to pnpm 11 via `packageManager`, and pnpm 11 requires
-Node >=22.13. That does not affect consumers of the published package, and CI
-still runs the test suite on Node 20 to keep the range above honest.
+Node >=22.13. That development requirement is declared as
+`devEngines.runtime` (`>=22.13 <27`), so pnpm warns when you are outside it.
+It is a warning rather than an error on purpose — CI runs the test suite on
+Node 20 to keep the supported range above honest, and that must not fail the
+install. None of this affects consumers of the published package.
 
 ## Security
 
