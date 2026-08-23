@@ -1,7 +1,7 @@
 {
   "name": "hast-plugin-external-title",
   "version": "1.0.1",
-  "description": "Sätteri hast plugin that fetches the page title of external links and sets it as the `title` attribute, with pluggable caching.",
+  "description": "S\u00e4tteri hast plugin that fetches the page title of external links and sets it as the `title` attribute, with pluggable caching.",
   "license": "MIT",
   "author": {
     "name": "Ari Palo",
@@ -45,6 +45,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest watch",
     "prepack": "pnpm build",
     "prepublishOnly": "pnpm typecheck && pnpm test:coverage"
@@ -59,6 +60,7 @@
     "satteri": "^0.10.0"
   },
   "devDependencies": {
+    "@astrojs/markdown-satteri": "^0.3.7",
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/git": "^11.0.1",
@@ -67,7 +69,9 @@
     "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "4.1.11",
+    "astro": "^7.2.4",
     "conventional-changelog-conventionalcommits": "^9.3.1",
+    "msw": "^2.15.0",
     "npm": "^11.19.0",
     "satteri": "^0.10.5",
     "semantic-release": "^25.0.9",
