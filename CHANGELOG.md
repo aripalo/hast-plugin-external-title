@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/aripalo/hast-plugin-external-title/compare/v1.0.2...v1.1.0) (2026-09-29)
+
+### Features
+
+* rel and target attributes ([1e9c07b](https://github.com/aripalo/hast-plugin-external-title/commit/1e9c07b4af6c7b3173b391508c4a02e46e0ea46e))
+
 ## [1.0.2](https://github.com/aripalo/hast-plugin-external-title/compare/v1.0.1...v1.0.2) (2026-08-23)
 
 ### Bug Fixes
