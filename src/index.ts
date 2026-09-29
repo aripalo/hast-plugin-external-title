@@ -77,8 +77,37 @@ function assertSafeAttribute(attribute: string): void {
 }
 
 /**
+ * Validates the `target` option.
+ *
+ * The type already narrows it to `'_blank'`, but Astro configs are usually
+ * plain `.mjs`, so the check has to happen at runtime too. Runs once, when the
+ * plugin is created, like {@link assertSafeAttribute}.
+ */
+function assertTarget(target: unknown): void {
+  if (target !== undefined && target !== '_blank') {
+    throw new Error(
+      `${PLUGIN_NAME}: invalid target ${JSON.stringify(
+        target
+      )}; only "_blank" is supported`
+    );
+  }
+}
+
+/**
+ * `true` when a hast property is present, even if empty.
+ *
+ * Sätteri reads an author's `rel=""` as `[]` and a bare `target` as `''`, and
+ * both mean the author made a choice that must not be overridden.
+ */
+function isSet(value: unknown): boolean {
+  return value !== undefined && value !== null;
+}
+
+/**
  * Sätteri hast plugin that fetches the page title of external links and writes
- * it as the link's `title` attribute (with pluggable caching).
+ * it as the link's `title` attribute (with pluggable caching). It can also
+ * stamp default `target` and `rel` attributes on the same links; values the
+ * author already set are kept.
  *
  * The visitor is async, so a compile using this plugin returns a promise —
  * `await` the result of `markdownToHtml` / `mdxToJs` / `markdownToJs`.
@@ -117,8 +146,11 @@ export function hastPluginExternalTitle(options: Options = {}) {
   const test = options.test ?? defaultTest;
   const attribute = options.attribute ?? 'title';
   const includeUpdatedAt = options.includeUpdatedAt ?? true;
+  const target = options.target;
+  const rel = options.rel;
 
   assertSafeAttribute(attribute);
+  assertTarget(target);
 
   return defineHastPlugin({
     name: PLUGIN_NAME,
@@ -130,6 +162,15 @@ export function hastPluginExternalTitle(options: Options = {}) {
         const href = node.properties.href;
         if (typeof href !== 'string') return;
         if (!test(href, node)) return;
+
+        // Link attributes go on before the fetch, so they land whether or not
+        // a title resolves. Anything the author already set wins.
+        if (target !== undefined && !isSet(node.properties.target)) {
+          ctx.setProperty(node, 'target', target);
+        }
+        if (rel !== undefined && !isSet(node.properties.rel)) {
+          ctx.setProperty(node, 'rel', rel);
+        }
 
         const entry = await resolver.resolve(href);
 

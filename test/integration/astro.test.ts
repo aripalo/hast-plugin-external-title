@@ -136,6 +136,8 @@ beforeAll(async () => {
             // relative to cwd, straight into the repo.
             cache: memoryCache(),
             onWarning: (warning) => warnings.push(warning),
+            target: '_blank',
+            rel: 'noopener noreferrer',
           }),
         ],
       }),
@@ -214,12 +216,21 @@ describe('Astro v7 build with the plugin registered via markdown.processor', () 
     expect(Number.isNaN(Date.parse(updatedAt!))).toBe(false);
   });
 
+  it('stamps the configured target and rel on the external link', () => {
+    const anchor = cheerio.load(html)(`a[href="${EXTERNAL_URL}"]`);
+
+    expect(anchor.attr('target')).toBe('_blank');
+    expect(anchor.attr('rel')).toBe('noopener noreferrer');
+  });
+
   it('leaves the relative link untouched', () => {
     const anchor = cheerio.load(html)('a[href="/somewhere-else"]');
 
     expect(anchor).toHaveLength(1);
     expect(anchor.attr('title')).toBeUndefined();
     expect(anchor.attr('data-title-updated-at')).toBeUndefined();
+    expect(anchor.attr('target')).toBeUndefined();
+    expect(anchor.attr('rel')).toBeUndefined();
   });
 
   it('does not leak the fetched page body into the document', () => {

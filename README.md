@@ -38,7 +38,8 @@ This is a [Sätteri][satteri] [hast plugin][satteri-plugins]. It subscribes to
 crosses into JavaScript — and for each external anchor (by default: `href`
 starting with `http://` or `https://`) it fetches the URL, parses the `<title>`
 element from the response, and writes it onto the anchor as a `title`
-attribute.
+attribute. It can also stamp default `target` and `rel` attributes on those
+same links, leaving any the author already wrote alone.
 
 To avoid hammering remote servers (and to keep your build times reasonable),
 results are persisted to a cache. The cache is **pluggable**: a default
@@ -173,6 +174,8 @@ Configuration (TypeScript type).
 | `test`             | `(href, node) => boolean`       | `http(s)://...`         | Predicate deciding which `<a>` elements to process. `node` is a **frozen** hast `Element`.                          |
 | `attribute`        | `string`                        | `'title'`               | Attribute name written on the link element. Must be inert — see [Security](#security).                              |
 | `includeUpdatedAt` | `boolean`                       | `true`                  | Whether to also write `data-title-updated-at` (ISO timestamp).                                                     |
+| `target`           | `'_blank'`                      | `undefined`             | Set `target="_blank"` on every processed link. A link that already has a `target` keeps it. Any other value throws. |
+| `rel`              | `string`                        | `undefined`             | Written verbatim as `rel` on every processed link, e.g. `'noopener noreferrer'`. A link that already has a `rel` keeps it. |
 | `concurrency`      | `number`                        | `8`                     | Maximum concurrent outbound fetches **per plugin instance** — see [Caching and scope](#caching-and-scope).          |
 | `fetch`            | `FetchOptions`                  | see below               | Options forwarded to the internal HTTP client (`timeout`, `userAgent`, `signal`, `maxBytes`) — see [Fetching](#fetching). |
 | `onWarning`        | `(warning: Warning) => void`    | `console.warn`          | Called for failed fetches and cache errors — see [Warnings](#warnings).                                            |
@@ -359,6 +362,19 @@ externalTitle({
 })
 ```
 
+### Open external links in a new tab
+
+```ts
+externalTitle({target: '_blank', rel: 'noopener noreferrer'})
+```
+
+Both are defaults, not overrides: a raw HTML anchor that already carries its own
+`target` or `rel` keeps it, even an empty `rel=""` (see
+[Limitations](#limitations) for enabling raw HTML). They are written before the
+title is fetched, so an external link gets them even when its page yields no
+title, and they go only on links that pass `test`. Only `'_blank'` is accepted
+for `target`; anything else fails when the plugin is created.
+
 ## Limitations
 
 - **Raw HTML anchors are ignored unless you opt in.** By default Sätteri keeps
@@ -379,9 +395,10 @@ externalTitle({
   `properties`. Only real hast elements are visited.
 - **"External" is a string prefix test, not an origin comparison.** Absolute
   links to your own domain are fetched too. Use `test` to exclude them.
-- **A link with no resolvable title gets no attributes at all** — not even
+- **A link with no resolvable title gets no `title`** — and no
   `data-title-updated-at` — so downstream code cannot distinguish "not
-  processed" from "processed, found nothing".
+  processed" from "processed, found nothing". (`target` and `rel`, when
+  configured, are still written.)
 - **The cache key is the href as written.** Two URLs that redirect to the same
   page are cached separately.
 - **A `<title>` outside `<head>` is not found.** Reading stops at the end of the

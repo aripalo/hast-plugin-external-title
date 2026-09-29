@@ -193,4 +193,30 @@ export interface Options extends ResolverOptions {
    * Default: `true`.
    */
   includeUpdatedAt?: boolean;
+
+  /**
+   * `target` attribute to set on every processed link.
+   *
+   * Written before the title is fetched, so it lands whether or not a title
+   * resolves. A link that already carries a `target` — from raw HTML or an
+   * earlier plugin — keeps it: the option is a default, not an override.
+   *
+   * Only `'_blank'` is accepted; anything else throws when the plugin is
+   * created.
+   *
+   * Default: `undefined` (the attribute is left untouched).
+   */
+  target?: '_blank';
+
+  /**
+   * `rel` attribute to set on every processed link, written verbatim — for
+   * example `'nofollow'`, `'noreferrer'` or `'noopener noreferrer'`.
+   *
+   * Written before the title is fetched, so it lands whether or not a title
+   * resolves. A link that already carries a `rel` — from raw HTML or an
+   * earlier plugin — keeps it: the option is a default, not an override.
+   *
+   * Default: `undefined` (the attribute is left untouched).
+   */
+  rel?: string;
 }
