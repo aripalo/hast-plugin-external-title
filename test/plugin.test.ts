@@ -365,6 +365,148 @@ describe('hastPluginExternalTitle', () => {
     });
   });
 
+  describe('target and rel defaults', () => {
+    /** Compiles with raw HTML enabled so author-written attributes reach the plugin. */
+    function compileRaw(source: string, options: Options = {}) {
+      return markdownToHtml(source, {
+        features: { rawHtml: true },
+        hastPlugins: [
+          externalTitle({
+            cache: memoryCache(),
+            onWarning: () => {},
+            ...options,
+          }),
+        ],
+      });
+    }
+
+    it('writes neither attribute unless configured', async () => {
+      const { html } = await compile('[x](https://example.com)');
+
+      expect(html).not.toContain('target=');
+      expect(html).not.toContain('rel=');
+    });
+
+    it('sets target="_blank" on external links only', async () => {
+      const { html } = await compile(
+        '[a](https://example.com) [b](/internal) [c](#anchor) [d](mailto:x@example.com)',
+        { target: '_blank' }
+      );
+
+      const $ = cheerio.load(html);
+      expect($('a')).toHaveLength(4);
+      expect($('a[href="https://example.com"]').attr('target')).toBe('_blank');
+      expect($('a[target]')).toHaveLength(1);
+    });
+
+    it('writes the rel option verbatim on external links only', async () => {
+      const { html } = await compile(
+        '[a](https://example.com) [b](/internal)',
+        { rel: 'nofollow noreferrer' }
+      );
+
+      const $ = cheerio.load(html);
+      expect($('a')).toHaveLength(2);
+      expect($('a[href="https://example.com"]').attr('rel')).toBe(
+        'nofollow noreferrer'
+      );
+      expect($('a[rel]')).toHaveLength(1);
+    });
+
+    it('sets both alongside the fetched title', async () => {
+      const { html } = await compile('[x](https://example.com)', {
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        includeUpdatedAt: false,
+      });
+
+      const anchor = cheerio.load(html)('a');
+      expect(anchor.attr('target')).toBe('_blank');
+      expect(anchor.attr('rel')).toBe('noopener noreferrer');
+      expect(anchor.attr('title')).toBe('Title of example.com');
+    });
+
+    it('keeps an author-supplied target and rel, per node', async () => {
+      const { html } = await compileRaw(
+        [
+          '<a href="https://raw.example.com" target="_self" rel="me">raw</a>',
+          '[md](https://md.example.com)',
+        ].join(' '),
+        { target: '_blank', rel: 'nofollow' }
+      );
+
+      const $ = cheerio.load(html);
+      const raw = $('a[href="https://raw.example.com"]');
+      const md = $('a[href="https://md.example.com"]');
+      expect(raw.attr('target')).toBe('_self');
+      expect(raw.attr('rel')).toBe('me');
+      expect(md.attr('target')).toBe('_blank');
+      expect(md.attr('rel')).toBe('nofollow');
+    });
+
+    it('treats an explicitly empty rel as an override', async () => {
+      const { html } = await compileRaw(
+        '<a href="https://empty.example.com" rel="">x</a>',
+        { rel: 'nofollow' }
+      );
+
+      expect(cheerio.load(html)('a').attr('rel')).toBe('');
+    });
+
+    it('applies them even when the title fetch fails', async () => {
+      stubFetch(() => new Error('network down'));
+
+      const { html } = await compile('[x](https://broken.example.com)', {
+        target: '_blank',
+        rel: 'nofollow',
+      });
+
+      const anchor = cheerio.load(html)('a');
+      expect(anchor.attr('target')).toBe('_blank');
+      expect(anchor.attr('rel')).toBe('nofollow');
+      expect(anchor.attr('title')).toBeUndefined();
+      expect(anchor.attr('data-title-updated-at')).toBeUndefined();
+    });
+
+    it('does not let a hostile title add or alter link attributes', async () => {
+      const title = '" target="_self" rel="x';
+      stubFetch(() => ({
+        body: `<html><head><title>${title}</title></head></html>`,
+      }));
+
+      const { html } = await compile('[x](https://hostile.example.com)', {
+        target: '_blank',
+        rel: 'noreferrer',
+        includeUpdatedAt: false,
+      });
+
+      const anchor = cheerio.load(html)('a');
+      expect(Object.keys(anchor[0]!.attribs).sort()).toEqual([
+        'href',
+        'rel',
+        'target',
+        'title',
+      ]);
+      expect(anchor.attr('target')).toBe('_blank');
+      expect(anchor.attr('rel')).toBe('noreferrer');
+      expect(anchor.attr('title')).toBe(title);
+    });
+
+    it.each(['_self', '_top', '', 'blank'])(
+      'rejects the target %p when the plugin is created',
+      (target) => {
+        expect(() => externalTitle({ target: target as never })).toThrow(
+          /invalid target/
+        );
+      }
+    );
+
+    it('accepts "_blank" and an omitted target', () => {
+      expect(() => externalTitle({ target: '_blank' })).not.toThrow();
+      expect(() => externalTitle({})).not.toThrow();
+    });
+  });
+
   describe('attribute safety', () => {
     it.each(['onmouseover', 'ONCLICK', 'onFocus'])(
       'refuses to write titles to the event handler %s',
